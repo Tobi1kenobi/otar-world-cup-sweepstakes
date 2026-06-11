@@ -5,7 +5,30 @@ on:
     # This cron runs at 08:00 UTC, Monday through Friday. 
     # During the summer, the UK is on BST (UTC+1), so 08:00 UTC = 09:00 UK time.
     - cron: '0 8 * * 1-5'
-  workflow_dispatch: # This allows you to click a button on GitHub to run it manually anytime.
+  workflow_dispatch:
+    # This allows you to click a button on GitHub to run it manually anytime.
+    inputs:
+      dry_run:
+        description: 'Set true to preview notifications without sending email'
+        required: false
+        default: true
+        type: boolean
+      participants_file:
+        description: 'Participant file to use for this run'
+        required: false
+        default: assigned_participants.tsv
+        type: choice
+        options:
+          - assigned_participants_real.tsv
+          - assigned_participants.tsv
+      window_start_utc:
+        description: 'Optional ISO UTC start (e.g. 2026-06-12T08:00:00Z). Must be used with window_end_utc.'
+        required: false
+        type: string
+      window_end_utc:
+        description: 'Optional ISO UTC end (e.g. 2026-06-13T08:00:00Z). Must be used with window_start_utc.'
+        required: false
+        type: string
 
 jobs:
   run-sweepstakes:
@@ -22,9 +45,43 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
+      - name: Create private participants file for scheduled runs
+        if: ${{ github.event_name == 'schedule' }}
+        env:
+          PARTICIPANTS_REAL_TSV_B64: ${{ secrets.PARTICIPANTS_REAL_TSV_B64 }}
+        run: |
+          if [ -z "$PARTICIPANTS_REAL_TSV_B64" ]; then
+            echo "Secret PARTICIPANTS_REAL_TSV_B64 is required for scheduled runs." >&2
+            exit 1
+          fi
+          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" | base64 --decode > assigned_participants_real.tsv
+
+      - name: Create private participants file for manual real-data runs
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv' }}
+        env:
+          PARTICIPANTS_REAL_TSV_B64: ${{ secrets.PARTICIPANTS_REAL_TSV_B64 }}
+        run: |
+          if [ -z "$PARTICIPANTS_REAL_TSV_B64" ]; then
+            echo "Secret PARTICIPANTS_REAL_TSV_B64 is required when participants_file is assigned_participants_real.tsv." >&2
+            exit 1
+          fi
+          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" | base64 --decode > assigned_participants_real.tsv
+
       - name: Run script
         env:
           API_KEY: ${{ secrets.API_KEY }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-        run: python your_script_name.py
+          SCHEDULE_HOUR_UTC: '8'
+          PARTICIPANTS_FILE: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file || 'assigned_participants_real.tsv' }}
+          WINDOW_START_UTC: ${{ github.event_name == 'workflow_dispatch' && inputs.window_start_utc || '' }}
+          WINDOW_END_UTC: ${{ github.event_name == 'workflow_dispatch' && inputs.window_end_utc || '' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}
+        run: python sweepstakes.py
+
+      - name: Commit updated state
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add state.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update sweepstakes state" && git push)

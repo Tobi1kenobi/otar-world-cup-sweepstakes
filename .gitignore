@@ -1,0 +1,6 @@
+# Private participant data (do not commit to a public repository)
+assigned_participants_real.tsv
+participants.tsv
+
+# Local helper with hard-coded test credentials (keep private)
+test_script.py

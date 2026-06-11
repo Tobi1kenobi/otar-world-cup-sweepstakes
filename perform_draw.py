@@ -9,15 +9,17 @@ from email.message import EmailMessage
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'worldcup.biscuits26@gmail.com')
 SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD', 'your_app_password')
 
-# I define the official 48 qualified teams.
-TEAMS = [
-    "USA", "Mexico", "Canada", "Argentina", "Brazil", "Uruguay", "Colombia", "Ecuador",
-    "Venezuela", "France", "England", "Spain", "Germany", "Portugal", "Italy", "Netherlands",
-    "Croatia", "Belgium", "Switzerland", "Denmark", "Serbia", "Poland", "Ukraine", "Sweden",
-    "Austria", "Morocco", "Senegal", "Egypt", "Algeria", "Nigeria", "Ivory Coast", "Cameroon",
-    "Ghana", "Mali", "Japan", "South Korea", "Iran", "Saudi Arabia", "Australia", "Qatar",
-    "UAE", "Uzbekistan", "Panama", "Costa Rica", "Jamaica", "New Zealand", "Peru", "Honduras"
-]
+# I define the official 48 qualified teams for the 2026 World Cup.
+TEAMS = ['Algeria', 'Argentina', 'Australia', 'Austria', 'Belgium', 
+        'Bosnia-Herzegovina', 'Brazil', 'Canada', 'Cape Verde Islands', 
+        'Colombia', 'Congo DR', 'Croatia', 'Curaçao', 'Czechia', 
+        'Ecuador', 'Egypt', 'England', 'France', 'Germany', 'Ghana', 
+        'Haiti', 'Iran', 'Iraq', 'Ivory Coast', 'Japan', 'Jordan', 
+        'Mexico', 'Morocco', 'Netherlands', 'New Zealand', 'Norway', 
+        'Panama', 'Paraguay', 'Portugal', 'Qatar', 'Saudi Arabia', 
+        'Scotland', 'Senegal', 'South Africa', 'South Korea', 'Spain', 
+        'Sweden', 'Switzerland', 'Tunisia', 'Turkey', 'United States', 
+        'Uruguay', 'Uzbekistan']
 
 def perform_draw(input_tsv, output_tsv):
     # I shuffle the teams randomly.
@@ -77,9 +79,20 @@ def send_notification_emails(assigned_rows):
             server.send_message(msg)
 
 if __name__ == "__main__":
-    print("Starting the draw...")
-    updated_rows = perform_draw("participants.tsv", "assigned_participants.tsv")
-    print("Draw complete. Saved to assigned_participants.tsv.")
+    output_file = "assigned_participants.tsv"
+    
+    if os.path.exists(output_file):
+        print(f"'{output_file}' already exists. Skipping draw and reading existing data...")
+        # I load the existing team assignments.
+        updated_rows = []
+        with open(output_file, mode='r', encoding='utf-8') as infile:
+            reader = csv.reader(infile, delimiter='\t')
+            for row in reader:
+                updated_rows.append(row)
+    else:
+        print("Starting the draw...")
+        updated_rows = perform_draw("participants.tsv", output_file)
+        print(f"Draw complete. Saved to {output_file}.")
     
     print("Sending emails...")
     send_notification_emails(updated_rows)
