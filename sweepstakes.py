@@ -5,6 +5,7 @@ import smtplib
 import ssl
 import os
 import time
+import yaml
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
@@ -13,10 +14,28 @@ API_KEY = os.environ.get('API_KEY', 'YOUR_NEW_TOKEN_HERE')
 HEADERS = {'X-Auth-Token': API_KEY}
 BASE_URL = 'https://api.football-data.org/v4'
 STATE_FILE = 'state.json'
+MILESTONE_MESSAGES_FILE = 'milestone_messages.yaml'
 DEFAULT_SCHEDULE_HOUR_UTC = 8
 REQUEST_TIMEOUT_SECONDS = 30
 REQUEST_INTERVAL_SECONDS = 6.5
 _LAST_REQUEST_MONOTONIC = None
+
+DEFAULT_MILESTONE_MESSAGES = {
+    "Red Card": "{team} saw red in the latest match.",
+    "90+ Minute Goal": "{team} scored in stoppage time.",
+    "Own Goal": "{team} benefited from an own goal by the opposition.",
+    "First Two Teams to Extra Time": "{team} featured in the first extra-time game.",
+    "Won Penalty Shootout": "{team} won a penalty shootout.",
+    "Giant Killer (Beat Top 5)": "{team} pulled off a giant-killing result against a top-5 team.",
+    "0-0 Boring Draw": "{team} was involved in a 0-0 draw.",
+    "Scored 4+ Goals": "{team} hit four or more goals.",
+    "Early Goal (First 5 mins)": "{team} scored inside the first five minutes.",
+    "First Goal of Tournament": "{team} scored the first goal of the tournament.",
+    "First Knockout Stage Goal": "{team} scored the first knockout-stage goal.",
+    "Arsenal Player Goal": "{team} scored through an Arsenal player.",
+    "Max Group Points (9)": "{team} finished the group stage with maximum points.",
+    "Zero Group Points (0)": "{team} finished the group stage with zero points.",
+}
 
 # I define the exact API spelling of the Arsenal squad.
 ARSENAL_PLAYERS = ['Ben White', 'Bukayo Saka', 'Christian Nørgaard', 'Cristhian Mosquera', 'David Raya',
@@ -66,6 +85,41 @@ def parse_utc_datetime(value):
         return parsed.replace(tzinfo=timezone.utc)
 
     return parsed.astimezone(timezone.utc)
+
+def load_milestone_messages(file_path=MILESTONE_MESSAGES_FILE):
+    # I load custom milestone messages from YAML and fall back to defaults.
+    messages = DEFAULT_MILESTONE_MESSAGES.copy()
+
+    if not os.path.exists(file_path):
+        return messages
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            loaded = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, OSError) as exc:
+        print(f"Warning: Could not read milestone messages file '{file_path}': {exc}")
+        return messages
+
+    if not isinstance(loaded, dict):
+        print(
+            f"Warning: Milestone messages file '{file_path}' must be a YAML map of milestone to message. "
+            "Using defaults."
+        )
+        return messages
+
+    for milestone, template in loaded.items():
+        if isinstance(milestone, str) and isinstance(template, str) and template.strip():
+            messages[milestone] = template.strip()
+
+    return messages
+
+def render_milestone_message(milestone_messages, milestone, team, name):
+    # I render a message template safely for each milestone line.
+    template = milestone_messages.get(milestone, "{team} triggered this milestone.")
+    try:
+        return template.format(team=team, milestone=milestone, name=name)
+    except (KeyError, ValueError):
+        return f"{team} triggered {milestone}."
 
 def rate_limited_get(url, headers=None, params=None, timeout=REQUEST_TIMEOUT_SECONDS):
     # I throttle all API calls to stay under the free-tier request policy.
@@ -241,8 +295,14 @@ def process_milestones(matches, state):
             awarded_team = goal.get('team', {}).get('name')
             
             if goal.get('type') in ['OWN', 'OWN_GOAL']:
-                mistake_team = home_team if awarded_team == away_team else away_team
-                results["Own Goal"].append(mistake_team)
+                harmed_team = None
+                if awarded_team == home_team:
+                    harmed_team = away_team
+                elif awarded_team == away_team:
+                    harmed_team = home_team
+
+                if harmed_team:
+                    results["Own Goal"].append(harmed_team)
                 
             if minute >= 90 and awarded_team:
                 results["90+ Minute Goal"].append(awarded_team)
@@ -302,9 +362,9 @@ def get_team_milestone_summary(final_report):
                 team_summary[team].append(milestone)
     return team_summary
 
-def get_notification_targets(team_summary, tsv_file_path):
-    # I map participants to winning milestones before deciding whether to send or dry-run.
-    targets = []
+def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
+    # I map participants to winning milestones, grouped by email for one message per run.
+    targets_by_email = {}
 
     if not os.path.exists(tsv_file_path):
         raise FileNotFoundError(
@@ -326,33 +386,57 @@ def get_notification_targets(team_summary, tsv_file_path):
             wants_updates = row[4].strip().lower().startswith('yes')
             assigned_teams = [t.strip() for t in row[5].split(',')]
 
-            if not wants_updates:
+            if not wants_updates or not email:
                 continue
 
-            biscuit_reasons = []
-            for team in assigned_teams:
-                if team in team_summary:
-                    milestones = ', '.join(team_summary[team])
-                    biscuit_reasons.append(f"• {team}: {milestones}")
-
-            if biscuit_reasons:
-                targets.append({
+            if email not in targets_by_email:
+                targets_by_email[email] = {
                     'email': email,
                     'name': name,
-                    'reasons': biscuit_reasons,
-                })
+                    'entries': [],
+                    'seen': set(),
+                }
+
+            target = targets_by_email[email]
+            if not target['name'] and name:
+                target['name'] = name
+
+            for team in assigned_teams:
+                milestones = team_summary.get(team, [])
+                for milestone in milestones:
+                    key = (team, milestone)
+                    if key in target['seen']:
+                        continue
+
+                    target['seen'].add(key)
+                    target['entries'].append({
+                        'team': team,
+                        'milestone': milestone,
+                        'message': render_milestone_message(milestone_messages, milestone, team, target['name']),
+                    })
+
+    targets = []
+    for email in sorted(targets_by_email.keys()):
+        target = targets_by_email[email]
+        if target['entries']:
+            target.pop('seen', None)
+            targets.append(target)
 
     return targets
 
-def process_participants_and_email(team_summary, tsv_file_path='assigned_participants.tsv', dry_run=False):
+def process_participants_and_email(team_summary, milestone_messages, tsv_file_path='assigned_participants.tsv', dry_run=False):
     # I read the TSV and send (or simulate) emails to winners.
-    targets = get_notification_targets(team_summary, tsv_file_path)
+    targets = get_notification_targets(team_summary, milestone_messages, tsv_file_path)
+    bcc_email = os.environ.get('BCC_EMAIL', '').strip()
 
     if dry_run:
         print(f"DRY RUN enabled. Would send {len(targets)} notification(s).")
+        if bcc_email:
+            print(f"BCC copy enabled for: {bcc_email}")
         for target in targets:
-            reasons = '; '.join(target['reasons'])
-            print(f"- {target['email']} ({target['name']}): {reasons}")
+            print(f"- {target['email']} ({target['name']}):")
+            for entry in target['entries']:
+                print(f"  • {entry['milestone']} [{entry['team']}]: {entry['message']}")
         return targets
 
     if not targets:
@@ -367,14 +451,19 @@ def process_participants_and_email(team_summary, tsv_file_path='assigned_partici
             msg['Subject'] = 'World Cup Sweepstakes: You won a biscuit!'
             msg['From'] = os.environ.get('SENDER_EMAIL')
             msg['To'] = target['email']
+            if bcc_email:
+                msg['Bcc'] = bcc_email
 
             body = (
                 f"Hi {target['name']},\n\n"
-                "Good news! Your team triggered a sweepstakes milestone in the latest run, "
+                "Good news! Your team(s) triggered sweepstakes milestones in the latest run, "
                 "which means you're entitled to a sweet treat.\n\n"
-                "Here is what happened:\n"
+                "Here is what happened this run:\n"
             )
-            body += '\n'.join(target['reasons'])
+            body += '\n'.join(
+                f"• {entry['milestone']} [{entry['team']}]: {entry['message']}"
+                for entry in target['entries']
+            )
             body += "\n\nI'll see you in the office to hand over your winnings.\n\nCheers,\nTobi"
 
             msg.set_content(body)
@@ -386,6 +475,7 @@ if __name__ == "__main__":
     # I execute the full pipeline.
     dry_run = os.environ.get('DRY_RUN', '').lower() in {'1', 'true', 'yes'}
     participants_file = os.environ.get('PARTICIPANTS_FILE', 'assigned_participants.tsv')
+    milestone_messages_file = os.environ.get('MILESTONE_MESSAGES_FILE', MILESTONE_MESSAGES_FILE)
 
     window_start, window_end = get_time_window_utc()
     start_date, end_date = get_date_range_for_window(window_start, window_end)
@@ -406,9 +496,15 @@ if __name__ == "__main__":
     
     final_report = {**daily_results, **standings_results}
     team_summary = get_team_milestone_summary(final_report)
+    milestone_messages = load_milestone_messages(milestone_messages_file)
     
     if team_summary:
-        notifications = process_participants_and_email(team_summary, participants_file, dry_run=dry_run)
+        notifications = process_participants_and_email(
+            team_summary,
+            milestone_messages,
+            participants_file,
+            dry_run=dry_run,
+        )
         print(f"Prepared {len(notifications)} participant notification(s).")
     else:
         print('No milestone winners in this run.')

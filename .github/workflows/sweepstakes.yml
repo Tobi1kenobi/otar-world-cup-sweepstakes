@@ -43,7 +43,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests pyyaml
 
       - name: Create private participants file for scheduled runs
         if: ${{ github.event_name == 'schedule' }}
@@ -72,6 +72,7 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          BCC_EMAIL: ${{ secrets.BCC_EMAIL }}
           SCHEDULE_HOUR_UTC: '8'
           PARTICIPANTS_FILE: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file || 'assigned_participants_real.tsv' }}
           WINDOW_START_UTC: ${{ github.event_name == 'workflow_dispatch' && inputs.window_start_utc || '' }}

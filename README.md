@@ -7,7 +7,8 @@ Automated World Cup sweepstakes scoring and winner notifications using the footb
 - Fetches World Cup matches from a UTC time window.
 - Applies milestone rules (red cards, own goals, first goal, penalties, and more).
 - Maps winning teams to participants.
-- Sends winner emails (or prints them in dry-run mode).
+- Sends one consolidated winner email per participant per run (or prints in dry-run mode).
+- Supports milestone-specific message templates via milestone_messages.yaml.
 - Persists one-off milestone flags and processed match IDs in state.json.
 
 ## Exact Rules Checked
@@ -33,7 +34,8 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 
 3. Own Goal
 - For each goal, if goal.type is OWN or OWN_GOAL, award the conceding team.
-- Conceding team is derived as home team when awarded team is away team, otherwise away team.
+- Conceding team is derived as the opposite of goal.team.name when it matches home or away.
+- If goal.team.name is missing or unexpected, no own-goal award is recorded.
 
 4. First Two Teams to Extra Time
 - If score.duration is EXTRA_TIME or PENALTY_SHOOTOUT and first_extra_time_awarded is false, award both teams.
@@ -99,6 +101,10 @@ Required repository secrets:
 - SENDER_PASSWORD
 - PARTICIPANTS_REAL_TSV_B64
 
+Optional repository secret:
+
+- BCC_EMAIL (if set, every winner email includes this address in Bcc)
+
 Workflow file: [.github/workflows/sweepstakes.yml](.github/workflows/sweepstakes.yml)
 
 ## Keeping Participant Data Private (Public Repo Safe)
@@ -138,6 +144,15 @@ Use the Run workflow button in GitHub Actions and set optional inputs:
 - window_start_utc: optional ISO UTC timestamp, for example 2026-06-12T08:00:00Z.
 - window_end_utc: optional ISO UTC timestamp, for example 2026-06-13T08:00:00Z.
 
+## Custom Milestone Messages (YAML)
+
+The script reads milestone message templates from [milestone_messages.yaml](milestone_messages.yaml).
+
+- Edit the message for any milestone key to customize the line shown in winner emails.
+- Supported placeholders in each template: {team}, {milestone}, {name}.
+- If a milestone key is missing in the YAML file, the script falls back to a built-in default.
+- You can override the file path with environment variable MILESTONE_MESSAGES_FILE.
+
 Important:
 
 - If you provide one window override, you must provide both.
@@ -148,6 +163,7 @@ Important:
 Dry run with sample participants:
 
 ```bash
+pip install requests pyyaml
 DRY_RUN=1 PARTICIPANTS_FILE=assigned_participants.tsv python sweepstakes.py
 ```
 

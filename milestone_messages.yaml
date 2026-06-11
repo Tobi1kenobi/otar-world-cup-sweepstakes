@@ -1,0 +1,18 @@
+# Customize the line shown for each winning milestone in the email.
+# Supported placeholders: {team}, {milestone}, {name}
+# If a milestone is missing here, sweepstakes.py falls back to a built-in default.
+
+Red Card: "{team} saw RED in their latest match."
+90+ Minute Goal: "{team} scored a late goal!"
+Own Goal: "Uh oh, {team} scored an own goal."
+First Two Teams to Extra Time: "{team} featured in the first extra-time game."
+Won Penalty Shootout: "Agony for the opponent, but great for {team} as you won a penalty shootout."
+Giant Killer (Beat Top 5): "WHAT?! {team} knocked out a top 5 team?! Giant killer alert!"
+0-0 Boring Draw: "Zzzzz, oh sorry I fell asleep. {team} was involved in a snorefest 0-0 draw."
+Scored 4+ Goals: "{team} ran riot with 4 or more goals in a match!!"
+Early Goal (First 5 mins): "Early bird {team} got the worm with a goal in the first five minutes."
+First Goal of Tournament: "{team} kicked off the tournament with a bang!"
+First Knockout Stage Goal: "{team} scored the first knockout-stage goal."
+Arsenal Player Goal: "WOW! {team} has a premier league champion?? And they scored? Amazing!"
+Max Group Points (9): "ON FIRE! {team} finished the group stage with the maximum possible 9 points!"
+Zero Group Points (0): "Ouch, {team} finished the group stage with zero points. Better luck next time!"
