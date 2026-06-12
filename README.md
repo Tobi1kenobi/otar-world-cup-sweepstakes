@@ -139,6 +139,8 @@ If personal data was committed previously, make sure to rotate any exposed crede
 Use the Run workflow button in GitHub Actions and set optional inputs:
 
 - dry_run: defaults to true. It prints who would be emailed and sends nothing.
+- dry_run does not update state.json by default, so you can rerun previews without consuming matches.
+- To force state updates during dry runs, set PERSIST_STATE_IN_DRY_RUN=1.
 - participants_file: defaults to assigned_participants.tsv for safer manual tests.
 - participants_file can be switched to assigned_participants_real.tsv for real notifications.
 - window_start_utc: optional ISO UTC timestamp, for example 2026-06-12T08:00:00Z.
@@ -166,6 +168,16 @@ Dry run with sample participants:
 pip install requests pyyaml
 DRY_RUN=1 PARTICIPANTS_FILE=assigned_participants.tsv python sweepstakes.py
 ```
+
+Useful debug flags:
+
+- Set DEBUG_MILESTONES=1 to print which milestones and teams were detected before participant filtering.
+- Set PERSIST_STATE_IN_DRY_RUN=1 if you want dry runs to update state.json (default is no state updates in dry run).
+
+Important API note:
+
+- If match responses do not include goals/bookings data, event-based milestones cannot be scored.
+- The script will print a warning and list the affected milestones when this happens.
 
 Dry run with explicit UTC window:
 

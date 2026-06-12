@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 # I set the configuration variables.
-API_KEY = os.environ.get('API_KEY', 'YOUR_NEW_TOKEN_HERE')
+API_KEY = os.environ.get('API_KEY', 'YOUR_NEW_TOKEN')
 HEADERS = {'X-Auth-Token': API_KEY}
 BASE_URL = 'https://api.football-data.org/v4'
 STATE_FILE = 'state.json'
@@ -36,6 +36,16 @@ DEFAULT_MILESTONE_MESSAGES = {
     "Max Group Points (9)": "{team} finished the group stage with maximum points.",
     "Zero Group Points (0)": "{team} finished the group stage with zero points.",
 }
+
+EVENT_BASED_MILESTONES = [
+    "Red Card",
+    "90+ Minute Goal",
+    "Own Goal",
+    "Early Goal (First 5 mins)",
+    "First Goal of Tournament",
+    "First Knockout Stage Goal",
+    "Arsenal Player Goal",
+]
 
 # I define the exact API spelling of the Arsenal squad.
 ARSENAL_PLAYERS = ['Ben White', 'Bukayo Saka', 'Christian Nørgaard', 'Cristhian Mosquera', 'David Raya',
@@ -199,7 +209,16 @@ def fetch_detailed_matches(start_date, end_date, window_start, window_end, proce
         'dateTo': end_date
     })
     
-    if response is None or response.status_code != 200:
+    if response is None:
+        print('Warning: Failed to fetch competition matches (network error or timeout).')
+        return []
+
+    if response.status_code != 200:
+        body_preview = (response.text or '').replace('\n', ' ')[:200]
+        print(
+            f"Warning: Failed to fetch competition matches ({response.status_code}). "
+            f"Response: {body_preview}"
+        )
         return []
 
     matches = response.json().get('matches', [])
@@ -331,7 +350,16 @@ def process_milestones(matches, state):
 def check_standings():
     # I fetch group standings for max or zero points.
     response = rate_limited_get(f"{BASE_URL}/competitions/WC/standings", headers=HEADERS)
-    if response is None or response.status_code != 200:
+    if response is None:
+        print('Warning: Failed to fetch standings (network error or timeout).')
+        return {"Max Group Points (9)": [], "Zero Group Points (0)": []}
+
+    if response.status_code != 200:
+        body_preview = (response.text or '').replace('\n', ' ')[:200]
+        print(
+            f"Warning: Failed to fetch standings ({response.status_code}). "
+            f"Response: {body_preview}"
+        )
         return {"Max Group Points (9)": [], "Zero Group Points (0)": []}
     
     standings_data = response.json().get('standings', [])
@@ -361,6 +389,37 @@ def get_team_milestone_summary(final_report):
                     team_summary[team] = []
                 team_summary[team].append(milestone)
     return team_summary
+
+def get_event_payload_coverage(matches):
+    # I estimate how many matches include event-level fields (goals/bookings).
+    with_event_payload = 0
+    without_event_payload = 0
+
+    for match in matches:
+        if ('goals' in match) or ('bookings' in match):
+            with_event_payload += 1
+        else:
+            without_event_payload += 1
+
+    return with_event_payload, without_event_payload
+
+def print_milestone_debug_summary(final_report, team_summary):
+    # I print a concise detection summary to debug milestone matching.
+    non_empty = []
+
+    for milestone, teams in final_report.items():
+        unique_teams = sorted(set(teams))
+        if unique_teams:
+            non_empty.append((milestone, unique_teams))
+
+    print('DEBUG: Milestone summary for this run')
+    if not non_empty:
+        print('DEBUG: No milestones were triggered for the selected window.')
+    else:
+        for milestone, teams in non_empty:
+            print(f"DEBUG: {milestone}: {', '.join(teams)}")
+
+    print(f"DEBUG: Teams with at least one milestone: {len(team_summary)}")
 
 def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
     # I map participants to winning milestones, grouped by email for one message per run.
@@ -434,7 +493,9 @@ def process_participants_and_email(team_summary, milestone_messages, tsv_file_pa
         if bcc_email:
             print(f"BCC copy enabled for: {bcc_email}")
         for target in targets:
-            print(f"- {target['email']} ({target['name']}):")
+            cookie_count = len(target['entries'])
+            cookie_label = 'World Cup Cookie' if cookie_count == 1 else 'World Cup Cookies'
+            print(f"- {target['email']} ({target['name']}): {cookie_count} {cookie_label}")
             for entry in target['entries']:
                 print(f"  • {entry['milestone']} [{entry['team']}]: {entry['message']}")
         return targets
@@ -447,8 +508,11 @@ def process_participants_and_email(team_summary, milestone_messages, tsv_file_pa
         server.login(os.environ.get('SENDER_EMAIL'), os.environ.get('SENDER_PASSWORD'))
 
         for target in targets:
+            cookie_count = len(target['entries'])
+            cookie_label = 'World Cup Cookie' if cookie_count == 1 else 'World Cup Cookies'
+
             msg = EmailMessage()
-            msg['Subject'] = 'World Cup Sweepstakes: You won a biscuit!'
+            msg['Subject'] = f'World Cup Sweepstakes: You won {cookie_count} {cookie_label}!'
             msg['From'] = os.environ.get('SENDER_EMAIL')
             msg['To'] = target['email']
             if bcc_email:
@@ -457,14 +521,14 @@ def process_participants_and_email(team_summary, milestone_messages, tsv_file_pa
             body = (
                 f"Hi {target['name']},\n\n"
                 "Good news! Your team(s) triggered sweepstakes milestones in the latest run, "
-                "which means you're entitled to a sweet treat.\n\n"
+                f"which means you're entitled to {cookie_count} {cookie_label}.\n\n"
                 "Here is what happened this run:\n"
             )
             body += '\n'.join(
                 f"• {entry['milestone']} [{entry['team']}]: {entry['message']}"
                 for entry in target['entries']
             )
-            body += "\n\nI'll see you in the office to hand over your winnings.\n\nCheers,\nTobi"
+            body += "\n\nNext time you're in the office, proceed to Flamingo to collect your hard-earned sweet treat.\n\nCheers,\nTobi"
 
             msg.set_content(body)
             server.send_message(msg)
@@ -474,8 +538,17 @@ def process_participants_and_email(team_summary, milestone_messages, tsv_file_pa
 if __name__ == "__main__":
     # I execute the full pipeline.
     dry_run = os.environ.get('DRY_RUN', '').lower() in {'1', 'true', 'yes'}
+    persist_state_in_dry_run = os.environ.get('PERSIST_STATE_IN_DRY_RUN', '').lower() in {'1', 'true', 'yes'}
+    debug_milestones = os.environ.get('DEBUG_MILESTONES', '').lower() in {'1', 'true', 'yes'}
+    should_persist_state = not dry_run or persist_state_in_dry_run
     participants_file = os.environ.get('PARTICIPANTS_FILE', 'assigned_participants.tsv')
     milestone_messages_file = os.environ.get('MILESTONE_MESSAGES_FILE', MILESTONE_MESSAGES_FILE)
+
+    if API_KEY in {'', 'YOUR_NEW_TOKEN_HERE'}:
+        print(
+            'Warning: API_KEY is not set. Set API_KEY to your football-data.org token; '
+            'otherwise no live milestones can be fetched.'
+        )
 
     window_start, window_end = get_time_window_utc()
     start_date, end_date = get_date_range_for_window(window_start, window_end)
@@ -487,16 +560,30 @@ if __name__ == "__main__":
     matches = fetch_detailed_matches(start_date, end_date, window_start, window_end, processed_match_ids)
     print(f"Fetched {len(matches)} new match(es) inside the processing window.")
 
+    with_event_payload, without_event_payload = get_event_payload_coverage(matches)
+    if without_event_payload > 0:
+        print(
+            f"Warning: Event-level data (goals/bookings) is unavailable for {without_event_payload} "
+            f"fetched match(es). These milestones cannot be evaluated from this API response: "
+            f"{', '.join(EVENT_BASED_MILESTONES)}"
+        )
+
     daily_results, new_state = process_milestones(matches, state)
-    new_state = update_processed_match_ids(new_state, matches)
     standings_results = check_standings()
     
-    # I save the state for the next run.
-    save_state(new_state)
+    if should_persist_state:
+        # I save the state for the next run.
+        new_state = update_processed_match_ids(new_state, matches)
+        save_state(new_state)
+    else:
+        print('DRY RUN: state.json was not updated. Set PERSIST_STATE_IN_DRY_RUN=1 to override.')
     
     final_report = {**daily_results, **standings_results}
     team_summary = get_team_milestone_summary(final_report)
     milestone_messages = load_milestone_messages(milestone_messages_file)
+
+    if debug_milestones:
+        print_milestone_debug_summary(final_report, team_summary)
     
     if team_summary:
         notifications = process_participants_and_email(
