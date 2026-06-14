@@ -4,9 +4,7 @@ import csv
 import smtplib
 import ssl
 import os
-import time
 import yaml
-from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 # I set the configuration variables.
@@ -15,10 +13,7 @@ HEADERS = {'X-Auth-Token': API_KEY}
 BASE_URL = 'https://api.football-data.org/v4'
 STATE_FILE = 'state.json'
 MILESTONE_MESSAGES_FILE = 'milestone_messages.yaml'
-DEFAULT_SCHEDULE_HOUR_UTC = 8
 REQUEST_TIMEOUT_SECONDS = 30
-REQUEST_INTERVAL_SECONDS = 6.5
-_LAST_REQUEST_MONOTONIC = None
 
 MATCH_UNFOLD_HEADERS = {
     'X-Unfold-Goals': 'true',
@@ -87,20 +82,6 @@ def save_state(state):
     with open(STATE_FILE, 'w') as f:
         json.dump(state, f, indent=2, sort_keys=True)
 
-def parse_utc_datetime(value):
-    if not value:
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-    except ValueError:
-        return None
-
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-
-    return parsed.astimezone(timezone.utc)
-
 def load_milestone_messages(file_path=MILESTONE_MESSAGES_FILE):
     # I load custom milestone messages from YAML and fall back to defaults.
     messages = DEFAULT_MILESTONE_MESSAGES.copy()
@@ -136,84 +117,22 @@ def render_milestone_message(milestone_messages, milestone, team, name):
     except (KeyError, ValueError):
         return f"{team} triggered {milestone}."
 
-def rate_limited_get(url, headers=None, params=None, timeout=REQUEST_TIMEOUT_SECONDS):
-    # I throttle all API calls to stay under the free-tier request policy.
-    global _LAST_REQUEST_MONOTONIC
-
-    if _LAST_REQUEST_MONOTONIC is not None:
-        elapsed = time.monotonic() - _LAST_REQUEST_MONOTONIC
-        if elapsed < REQUEST_INTERVAL_SECONDS:
-            time.sleep(REQUEST_INTERVAL_SECONDS - elapsed)
-
+def api_get(url, headers=None, params=None, timeout=REQUEST_TIMEOUT_SECONDS):
+    # I wrap GET requests to centralize timeout and network-error handling.
     try:
         response = requests.get(url, headers=headers, params=params, timeout=timeout)
     except requests.RequestException:
-        _LAST_REQUEST_MONOTONIC = time.monotonic()
         return None
-
-    _LAST_REQUEST_MONOTONIC = time.monotonic()
     return response
 
-def get_time_window_utc(now_utc=None):
-    # I determine the UTC processing window for this run.
-    override_start = os.environ.get('WINDOW_START_UTC')
-    override_end = os.environ.get('WINDOW_END_UTC')
-
-    if now_utc is None:
-        now_utc = datetime.now(timezone.utc)
-
-    if now_utc.tzinfo is None:
-        now_utc = now_utc.replace(tzinfo=timezone.utc)
-
-    now_utc = now_utc.astimezone(timezone.utc)
-
-    if override_start or override_end:
-        if not (override_start and override_end):
-            raise ValueError('Both WINDOW_START_UTC and WINDOW_END_UTC must be provided together.')
-
-        start = parse_utc_datetime(override_start)
-        end = parse_utc_datetime(override_end)
-
-        if not start or not end:
-            raise ValueError('Invalid override window. Use ISO timestamps, e.g. 2026-06-12T08:00:00Z.')
-        if start >= end:
-            raise ValueError('WINDOW_START_UTC must be earlier than WINDOW_END_UTC.')
-
-        return start, end
-
-    event_name = os.environ.get('GITHUB_EVENT_NAME', '').lower()
-
-    try:
-        schedule_hour_utc = int(os.environ.get('SCHEDULE_HOUR_UTC', str(DEFAULT_SCHEDULE_HOUR_UTC)))
-    except ValueError:
-        schedule_hour_utc = DEFAULT_SCHEDULE_HOUR_UTC
-
-    schedule_hour_utc = max(0, min(23, schedule_hour_utc))
-
-    if event_name == 'schedule' and now_utc.weekday() == 0:
-        # Monday scheduled run: catch everything since Friday's scheduled run.
-        start = (now_utc - timedelta(days=3)).replace(
-            hour=schedule_hour_utc,
-            minute=0,
-            second=0,
-            microsecond=0
-        )
-    else:
-        start = now_utc - timedelta(hours=24)
-
-    return start, now_utc
-
-def get_date_range_for_window(window_start, window_end):
-    # I convert the UTC window into date boundaries for the API query.
-    return window_start.strftime('%Y-%m-%d'), window_end.strftime('%Y-%m-%d')
-
-def fetch_detailed_matches(start_date, end_date, window_start, window_end, processed_match_ids):
-    # I fetch the bulk matches for the date range.
+def fetch_unprocessed_finished_matches(processed_match_ids):
+    # I fetch all finished WC matches, then keep only those not processed yet.
     match_headers = {**HEADERS, **MATCH_UNFOLD_HEADERS}
-    response = rate_limited_get(f"{BASE_URL}/competitions/WC/matches", headers=match_headers, params={
-        'dateFrom': start_date,
-        'dateTo': end_date
-    })
+    response = api_get(
+        f"{BASE_URL}/competitions/WC/matches",
+        headers=match_headers,
+        params={'status': 'FINISHED'}
+    )
     
     if response is None:
         print('Warning: Failed to fetch competition matches (network error or timeout).')
@@ -228,7 +147,7 @@ def fetch_detailed_matches(start_date, end_date, window_start, window_end, proce
         return []
 
     matches = response.json().get('matches', [])
-    detailed_matches = []
+    unprocessed_matches = []
     detail_fallback_count = 0
     
     for m in matches:
@@ -236,40 +155,38 @@ def fetch_detailed_matches(start_date, end_date, window_start, window_end, proce
         if match_id is None or match_id in processed_match_ids:
             continue
 
-        kickoff_time = parse_utc_datetime(m.get('utcDate'))
-        if not kickoff_time or not (window_start <= kickoff_time < window_end):
+        match_to_use = m
+        if ('goals' not in m) and ('bookings' not in m):
+            res = api_get(f"{BASE_URL}/matches/{match_id}", headers=match_headers)
+            if res is not None and res.status_code == 200:
+                match_to_use = res.json()
+            else:
+                detail_fallback_count += 1
+                status = 'no response' if res is None else str(res.status_code)
+                body_preview = '' if res is None else (res.text or '').replace('\n', ' ')[:180]
+                print(
+                    f"Warning: Detailed match data unavailable for match {match_id} ({status}). "
+                    "Using competition list payload fallback. "
+                    f"Response: {body_preview}"
+                )
+
+        if match_to_use.get('status') != 'FINISHED':
+            # I skip unfinished matches so milestones are evaluated on final data.
+            detail_fallback_count += 1
             continue
 
-        match_to_use = None
-        res = rate_limited_get(f"{BASE_URL}/matches/{match_id}", headers=match_headers)
-        if res is not None and res.status_code == 200:
-            match_data = res.json()
-            detail_kickoff = parse_utc_datetime(match_data.get('utcDate')) or kickoff_time
-            if window_start <= detail_kickoff < window_end:
-                match_to_use = match_data
-        else:
-            detail_fallback_count += 1
-            status = 'no response' if res is None else str(res.status_code)
-            body_preview = '' if res is None else (res.text or '').replace('\n', ' ')[:180]
-            print(
-                f"Warning: Detailed match data unavailable for match {match_id} ({status}). "
-                "Using competition list payload fallback. "
-                f"Response: {body_preview}"
-            )
+        unprocessed_matches.append(match_to_use)
 
-        if match_to_use is None:
-            # Fallback preserves score/stage-based milestone checks even if detailed event payload is unavailable.
-            match_to_use = m
-
-        detailed_matches.append(match_to_use)
+    # I keep processing deterministic without relying on date windows.
+    unprocessed_matches.sort(key=lambda x: x.get('id', 0))
 
     if detail_fallback_count > 0:
         print(
-            f"Warning: Used competition payload fallback for {detail_fallback_count} match(es). "
+            f"Warning: Used fallback or skipped non-finished data for {detail_fallback_count} match(es). "
             "Event-based milestones may be incomplete for those matches."
         )
-        
-    return detailed_matches
+
+    return unprocessed_matches
 
 def update_processed_match_ids(state, matches):
     # I keep track of processed matches so reruns do not send duplicate emails.
@@ -382,7 +299,7 @@ def process_milestones(matches, state):
 
 def check_standings():
     # I fetch group standings for max or zero points.
-    response = rate_limited_get(f"{BASE_URL}/competitions/WC/standings", headers=HEADERS)
+    response = api_get(f"{BASE_URL}/competitions/WC/standings", headers=HEADERS)
     if response is None:
         print('Warning: Failed to fetch standings (network error or timeout).')
         return {"Max Group Points (9)": [], "Zero Group Points (0)": []}
@@ -447,7 +364,7 @@ def print_milestone_debug_summary(final_report, team_summary):
 
     print('DEBUG: Milestone summary for this run')
     if not non_empty:
-        print('DEBUG: No milestones were triggered for the selected window.')
+        print('DEBUG: No milestones were triggered in this run.')
     else:
         for milestone, teams in non_empty:
             print(f"DEBUG: {milestone}: {', '.join(teams)}")
@@ -583,15 +500,12 @@ if __name__ == "__main__":
             'otherwise no live milestones can be fetched.'
         )
 
-    window_start, window_end = get_time_window_utc()
-    start_date, end_date = get_date_range_for_window(window_start, window_end)
-
-    print(f"Processing window UTC: ({window_start.isoformat()}, {window_end.isoformat()}]")
     state = load_state()
     processed_match_ids = set(state.get('processed_match_ids', []))
+    print(f"Loaded {len(processed_match_ids)} previously processed match id(s) from state.")
     
-    matches = fetch_detailed_matches(start_date, end_date, window_start, window_end, processed_match_ids)
-    print(f"Fetched {len(matches)} new match(es) inside the processing window.")
+    matches = fetch_unprocessed_finished_matches(processed_match_ids)
+    print(f"Fetched {len(matches)} new finished match(es) not yet in state.")
 
     with_event_payload, without_event_payload = get_event_payload_coverage(matches)
     if without_event_payload > 0:
