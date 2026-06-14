@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 # I set the configuration variables.
-API_KEY = os.environ.get('API_KEY', 'YOUR_NEW_TOKEN')
+API_KEY = os.environ.get('API_KEY', 'YOUR_NEW_TOKEN_HERE')
 HEADERS = {'X-Auth-Token': API_KEY}
 BASE_URL = 'https://api.football-data.org/v4'
 STATE_FILE = 'state.json'
@@ -19,6 +19,11 @@ DEFAULT_SCHEDULE_HOUR_UTC = 8
 REQUEST_TIMEOUT_SECONDS = 30
 REQUEST_INTERVAL_SECONDS = 6.5
 _LAST_REQUEST_MONOTONIC = None
+
+MATCH_UNFOLD_HEADERS = {
+    'X-Unfold-Goals': 'true',
+    'X-Unfold-Bookings': 'true',
+}
 
 DEFAULT_MILESTONE_MESSAGES = {
     "Red Card": "{team} saw red in the latest match.",
@@ -204,7 +209,8 @@ def get_date_range_for_window(window_start, window_end):
 
 def fetch_detailed_matches(start_date, end_date, window_start, window_end, processed_match_ids):
     # I fetch the bulk matches for the date range.
-    response = rate_limited_get(f"{BASE_URL}/competitions/WC/matches", headers=HEADERS, params={
+    match_headers = {**HEADERS, **MATCH_UNFOLD_HEADERS}
+    response = rate_limited_get(f"{BASE_URL}/competitions/WC/matches", headers=match_headers, params={
         'dateFrom': start_date,
         'dateTo': end_date
     })
@@ -223,18 +229,45 @@ def fetch_detailed_matches(start_date, end_date, window_start, window_end, proce
 
     matches = response.json().get('matches', [])
     detailed_matches = []
+    detail_fallback_count = 0
     
     for m in matches:
         match_id = m.get('id')
         if match_id is None or match_id in processed_match_ids:
             continue
 
-        res = rate_limited_get(f"{BASE_URL}/matches/{match_id}", headers=HEADERS)
+        kickoff_time = parse_utc_datetime(m.get('utcDate'))
+        if not kickoff_time or not (window_start <= kickoff_time < window_end):
+            continue
+
+        match_to_use = None
+        res = rate_limited_get(f"{BASE_URL}/matches/{match_id}", headers=match_headers)
         if res is not None and res.status_code == 200:
             match_data = res.json()
-            kickoff_time = parse_utc_datetime(match_data.get('utcDate'))
-            if kickoff_time and window_start <= kickoff_time < window_end:
-                detailed_matches.append(match_data)
+            detail_kickoff = parse_utc_datetime(match_data.get('utcDate')) or kickoff_time
+            if window_start <= detail_kickoff < window_end:
+                match_to_use = match_data
+        else:
+            detail_fallback_count += 1
+            status = 'no response' if res is None else str(res.status_code)
+            body_preview = '' if res is None else (res.text or '').replace('\n', ' ')[:180]
+            print(
+                f"Warning: Detailed match data unavailable for match {match_id} ({status}). "
+                "Using competition list payload fallback. "
+                f"Response: {body_preview}"
+            )
+
+        if match_to_use is None:
+            # Fallback preserves score/stage-based milestone checks even if detailed event payload is unavailable.
+            match_to_use = m
+
+        detailed_matches.append(match_to_use)
+
+    if detail_fallback_count > 0:
+        print(
+            f"Warning: Used competition payload fallback for {detail_fallback_count} match(es). "
+            "Event-based milestones may be incomplete for those matches."
+        )
         
     return detailed_matches
 
@@ -544,7 +577,7 @@ if __name__ == "__main__":
     participants_file = os.environ.get('PARTICIPANTS_FILE', 'assigned_participants.tsv')
     milestone_messages_file = os.environ.get('MILESTONE_MESSAGES_FILE', MILESTONE_MESSAGES_FILE)
 
-    if API_KEY in {'', 'YOUR_NEW_TOKEN_HERE'}:
+    if API_KEY in {'', 'YOUR_NEW_TOKEN', 'YOUR_NEW_TOKEN_HERE'}:
         print(
             'Warning: API_KEY is not set. Set API_KEY to your football-data.org token; '
             'otherwise no live milestones can be fetched.'
