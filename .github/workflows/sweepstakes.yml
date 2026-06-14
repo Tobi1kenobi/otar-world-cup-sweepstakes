@@ -54,7 +54,7 @@ jobs:
             echo "Secret PARTICIPANTS_REAL_TSV_B64 is required for scheduled runs." >&2
             exit 1
           fi
-          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" | base64 --decode --ignore-garbage > assigned_participants_real.tsv
+          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" > assigned_participants_real.tsv
 
       - name: Create private participants file for manual real-data runs
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv' }}
@@ -65,7 +65,7 @@ jobs:
             echo "Secret PARTICIPANTS_REAL_TSV_B64 is required when participants_file is assigned_participants_real.tsv." >&2
             exit 1
           fi
-          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" | base64 --decode --ignore-garbage > assigned_participants_real.tsv
+          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" > assigned_participants_real.tsv
 
       - name: Run script
         env:
