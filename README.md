@@ -99,7 +99,7 @@ Required repository secrets:
 - API_KEY
 - SENDER_EMAIL
 - SENDER_PASSWORD
-- PARTICIPANTS_REAL_TSV_B64
+- PARTICIPANTS_REAL_TSV
 
 Optional repository secret:
 
@@ -112,11 +112,11 @@ Workflow file: [.github/workflows/sweepstakes.yml](.github/workflows/sweepstakes
 Recommended approach:
 
 1. Do not commit [assigned_participants_real.tsv](assigned_participants_real.tsv) to a public repository.
-2. Store the raw TSV content in a GitHub Secret named PARTICIPANTS_REAL_TSV_B64.
+2. Store the raw TSV content in a GitHub Secret named PARTICIPANTS_REAL_TSV.
 3. Let the workflow materialize [assigned_participants_real.tsv](assigned_participants_real.tsv) at runtime from that secret.
 4. Keep only non-sensitive sample data in [assigned_participants.tsv](assigned_participants.tsv).
 
-To set the secret value, open [assigned_participants_real.tsv](assigned_participants_real.tsv) and paste the raw file contents directly into the GitHub secret named PARTICIPANTS_REAL_TSV_B64. No encoding is required.
+To set the secret value, open [assigned_participants_real.tsv](assigned_participants_real.tsv) and paste the raw file contents directly into the GitHub secret named PARTICIPANTS_REAL_TSV. No encoding is required.
 
 If personal data was committed previously, make sure to rotate any exposed credentials and consider rewriting git history before making the repository public.
 

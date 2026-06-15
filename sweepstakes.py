@@ -378,7 +378,7 @@ def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
     if not os.path.exists(tsv_file_path):
         raise FileNotFoundError(
             f"Participants file '{tsv_file_path}' was not found. "
-            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV_B64 "
+            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV "
             "or use PARTICIPANTS_FILE=assigned_participants.tsv for dry runs."
         )
 

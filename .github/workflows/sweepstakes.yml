@@ -50,24 +50,32 @@ jobs:
       - name: Create private participants file for scheduled runs
         if: ${{ github.event_name == 'schedule' }}
         env:
-          PARTICIPANTS_REAL_TSV_B64: ${{ secrets.PARTICIPANTS_REAL_TSV_B64 }}
+          PARTICIPANTS_REAL_TSV: ${{ secrets.PARTICIPANTS_REAL_TSV }}
         run: |
-          if [ -z "$PARTICIPANTS_REAL_TSV_B64" ]; then
-            echo "Secret PARTICIPANTS_REAL_TSV_B64 is required for scheduled runs." >&2
+          if [ -z "$PARTICIPANTS_REAL_TSV" ]; then
+            echo "Secret PARTICIPANTS_REAL_TSV is required for scheduled runs." >&2
             exit 1
           fi
-          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" > assigned_participants_real.tsv
+          printf '%s' "$PARTICIPANTS_REAL_TSV" > assigned_participants_real.tsv
+          if ! awk -F '\t' 'NR == 1 { exit !(NF >= 6) }' assigned_participants_real.tsv; then
+            echo "Secret PARTICIPANTS_REAL_TSV must be raw TSV content with at least 6 tab-separated columns in the header." >&2
+            exit 1
+          fi
 
       - name: Create private participants file for manual real-data runs
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv' }}
         env:
-          PARTICIPANTS_REAL_TSV_B64: ${{ secrets.PARTICIPANTS_REAL_TSV_B64 }}
+          PARTICIPANTS_REAL_TSV: ${{ secrets.PARTICIPANTS_REAL_TSV }}
         run: |
-          if [ -z "$PARTICIPANTS_REAL_TSV_B64" ]; then
-            echo "Secret PARTICIPANTS_REAL_TSV_B64 is required when participants_file is assigned_participants_real.tsv." >&2
+          if [ -z "$PARTICIPANTS_REAL_TSV" ]; then
+            echo "Secret PARTICIPANTS_REAL_TSV is required when participants_file is assigned_participants_real.tsv." >&2
             exit 1
           fi
-          printf '%s' "$PARTICIPANTS_REAL_TSV_B64" > assigned_participants_real.tsv
+          printf '%s' "$PARTICIPANTS_REAL_TSV" > assigned_participants_real.tsv
+          if ! awk -F '\t' 'NR == 1 { exit !(NF >= 6) }' assigned_participants_real.tsv; then
+            echo "Secret PARTICIPANTS_REAL_TSV must be raw TSV content with at least 6 tab-separated columns in the header." >&2
+            exit 1
+          fi
 
       - name: Run script
         env:
