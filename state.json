@@ -1,19 +1,7 @@
 {
   "first_extra_time_awarded": false,
-  "first_goal_awarded": true,
+  "first_goal_awarded": false,
   "first_ko_goal_awarded": false,
   "processed_match_ids": [
-    537327,
-    537328,
-    537333,
-    537334,
-    537339,
-    537340,
-    537345,
-    537346,
-    537351,
-    537352,
-    537357,
-    537358
   ]
 }
