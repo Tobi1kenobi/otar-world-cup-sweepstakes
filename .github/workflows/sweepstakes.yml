@@ -11,8 +11,11 @@ on:
       dry_run:
         description: 'Set true to preview notifications without sending email'
         required: false
-        default: true
-        type: boolean
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
       participants_file:
         description: 'Participant file to use for this run'
         required: false
@@ -21,14 +24,6 @@ on:
         options:
           - assigned_participants_real.tsv
           - assigned_participants.tsv
-      window_start_utc:
-        description: 'Optional ISO UTC start (e.g. 2026-06-12T08:00:00Z). Must be used with window_end_utc.'
-        required: false
-        type: string
-      window_end_utc:
-        description: 'Optional ISO UTC end (e.g. 2026-06-13T08:00:00Z). Must be used with window_start_utc.'
-        required: false
-        type: string
 
 jobs:
   run-sweepstakes:
@@ -85,9 +80,7 @@ jobs:
           BCC_EMAIL: ${{ secrets.BCC_EMAIL }}
           SCHEDULE_HOUR_UTC: '8'
           PARTICIPANTS_FILE: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file || 'assigned_participants_real.tsv' }}
-          WINDOW_START_UTC: ${{ github.event_name == 'workflow_dispatch' && inputs.window_start_utc || '' }}
-          WINDOW_END_UTC: ${{ github.event_name == 'workflow_dispatch' && inputs.window_end_utc || '' }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true' && '1' || '' }}
         run: python sweepstakes.py
 
       - name: Commit updated state

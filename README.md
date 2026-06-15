@@ -124,7 +124,7 @@ If personal data was committed previously, make sure to rotate any exposed crede
 
 Use the Run workflow button in GitHub Actions and set optional inputs:
 
-- dry_run: defaults to true. It prints who would be emailed and sends nothing.
+- dry_run: choose `true` (default, preview only) or `false` (live send).
 - dry_run does not update state.json by default, so you can rerun previews without consuming matches.
 - To force state updates during dry runs, set PERSIST_STATE_IN_DRY_RUN=1.
 - participants_file: defaults to assigned_participants.tsv for safer manual tests.
