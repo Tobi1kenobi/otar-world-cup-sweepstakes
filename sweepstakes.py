@@ -517,14 +517,7 @@ if __name__ == "__main__":
 
     daily_results, new_state = process_milestones(matches, state)
     standings_results = check_standings()
-    
-    if should_persist_state:
-        # I save the state for the next run.
-        new_state = update_processed_match_ids(new_state, matches)
-        save_state(new_state)
-    else:
-        print('DRY RUN: state.json was not updated. Set PERSIST_STATE_IN_DRY_RUN=1 to override.')
-    
+
     final_report = {**daily_results, **standings_results}
     team_summary = get_team_milestone_summary(final_report)
     milestone_messages = load_milestone_messages(milestone_messages_file)
@@ -542,3 +535,10 @@ if __name__ == "__main__":
         print(f"Prepared {len(notifications)} participant notification(s).")
     else:
         print('No milestone winners in this run.')
+
+    if should_persist_state:
+        # I save state only after the full run succeeds.
+        new_state = update_processed_match_ids(new_state, matches)
+        save_state(new_state)
+    else:
+        print('DRY RUN: state.json was not updated. Set PERSIST_STATE_IN_DRY_RUN=1 to override.')
