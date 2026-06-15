@@ -9,7 +9,7 @@ on:
     # This allows you to click a button on GitHub to run it manually anytime.
     inputs:
       dry_run:
-        description: 'Set true to preview notifications without sending email'
+        description: 'Dry run: Set true to preview notifications without sending email or updating state.json'
         required: false
         default: 'true'
         type: choice
