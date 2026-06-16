@@ -23,7 +23,7 @@ MATCH_UNFOLD_HEADERS = {
 DEFAULT_MILESTONE_MESSAGES = {
     "Red Card": "{team} saw red in the latest match.",
     "90+ Minute Goal": "{team} scored in stoppage time.",
-    "Own Goal": "{team} benefited from an own goal by the opposition.",
+    "Own Goal": "{team} had a player score an own goal in the latest match.",
     "First Two Teams to Extra Time": "{team} featured in the first extra-time game.",
     "Won Penalty Shootout": "{team} won a penalty shootout.",
     "Giant Killer (Beat Top 5)": "{team} pulled off a giant-killing result against a top-5 team.",
@@ -55,6 +55,27 @@ ARSENAL_PLAYERS = ['Ben White', 'Bukayo Saka', 'Christian Nørgaard', 'Cristhian
                     'Max Dowman', 'Mikel Merino', 'Myles Lewis-Skelly', 'Noni Madueke', 
                     'Piero Hincapié', 'Riccardo Calafiori', 'Tommy Setford', 'Viktor Gyökeres',
                     'William Saliba']
+
+def get_team_name(team_payload):
+    # I normalize team names from supported API payload fields.
+    if not isinstance(team_payload, dict):
+        return None
+
+    for key in ('name', 'shortName', 'tla'):
+        value = team_payload.get(key)
+        if isinstance(value, str):
+            value = value.strip()
+            if value:
+                return value
+
+    return None
+
+def parse_score_value(value):
+    # I parse score values that may arrive as strings or null.
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 def load_state():
     # I load the state file to track the one-off milestones.
@@ -214,17 +235,26 @@ def process_milestones(matches, state):
     matches.sort(key=lambda x: x.get('utcDate', ''))
 
     for match in matches:
-        home_team = match['homeTeam']['name']
-        away_team = match['awayTeam']['name']
+        home_team = get_team_name(match.get('homeTeam', {}))
+        away_team = get_team_name(match.get('awayTeam', {}))
+        if not home_team or not away_team:
+            # I skip malformed team payloads to avoid partial milestone awards.
+            continue
+
         score = match.get('score', {})
         stage = match.get('stage', 'GROUP_STAGE')
 
-        ft_home = score.get('fullTime', {}).get('home')
-        ft_away = score.get('fullTime', {}).get('away')
+        ft_home = parse_score_value(score.get('fullTime', {}).get('home'))
+        ft_away = parse_score_value(score.get('fullTime', {}).get('away'))
+        if ft_home is None and ft_away is None:
+            # I fall back to regularTime when fullTime is missing in some payloads.
+            ft_home = parse_score_value(score.get('regularTime', {}).get('home'))
+            ft_away = parse_score_value(score.get('regularTime', {}).get('away'))
         
         # I check full-time milestones.
         if ft_home == 0 and ft_away == 0:
-            results["0-0 Boring Draw"].extend([home_team, away_team])
+            results["0-0 Boring Draw"].append(home_team)
+            results["0-0 Boring Draw"].append(away_team)
         if ft_home is not None and ft_home >= 4:
             results["Scored 4+ Goals"].append(home_team)
         if ft_away is not None and ft_away >= 4:
@@ -261,33 +291,27 @@ def process_milestones(matches, state):
         for goal in match.get('goals', []):
             minute = goal.get('minute', 0)
             scorer_name = goal.get('scorer', {}).get('name')
-            awarded_team = goal.get('team', {}).get('name')
+            goal_team = get_team_name(goal.get('team', {}))
             
-            if goal.get('type') in ['OWN', 'OWN_GOAL']:
-                harmed_team = None
-                if awarded_team == home_team:
-                    harmed_team = away_team
-                elif awarded_team == away_team:
-                    harmed_team = home_team
-
-                if harmed_team:
-                    results["Own Goal"].append(harmed_team)
+            if goal.get('type') in ['OWN', 'OWN_GOAL'] and goal_team:
+                # I award own goals to the team of the player who scored the own goal.
+                results["Own Goal"].append(goal_team)
                 
-            if minute >= 90 and awarded_team:
-                results["90+ Minute Goal"].append(awarded_team)
+            if minute >= 90 and goal_team:
+                results["90+ Minute Goal"].append(goal_team)
                 
-            if minute <= 5 and awarded_team:
-                results["Early Goal (First 5 mins)"].append(awarded_team)
+            if minute <= 5 and goal_team:
+                results["Early Goal (First 5 mins)"].append(goal_team)
                 
-            if scorer_name in ARSENAL_PLAYERS and awarded_team:
-                results["Arsenal Player Goal"].append(awarded_team)
+            if scorer_name in ARSENAL_PLAYERS and goal_team:
+                results["Arsenal Player Goal"].append(goal_team)
                 
-            if awarded_team and not state["first_goal_awarded"]:
-                results["First Goal of Tournament"].append(awarded_team)
+            if goal_team and not state["first_goal_awarded"]:
+                results["First Goal of Tournament"].append(goal_team)
                 state["first_goal_awarded"] = True
                 
-            if awarded_team and stage != 'GROUP_STAGE' and not state["first_ko_goal_awarded"]:
-                results["First Knockout Stage Goal"].append(awarded_team)
+            if goal_team and stage != 'GROUP_STAGE' and not state["first_ko_goal_awarded"]:
+                results["First Knockout Stage Goal"].append(goal_team)
                 state["first_ko_goal_awarded"] = True
 
         for booking in match.get('bookings', []):

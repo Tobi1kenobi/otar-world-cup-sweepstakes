@@ -33,9 +33,9 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 - For each goal, if goal.minute >= 90 and goal.team.name exists, award goal.team.name.
 
 3. Own Goal
-- For each goal, if goal.type is OWN or OWN_GOAL, award the conceding team.
-- Conceding team is derived as the opposite of goal.team.name when it matches home or away.
-- If goal.team.name is missing or unexpected, no own-goal award is recorded.
+- For each goal, if goal.type is OWN or OWN_GOAL and goal.team.name exists, award goal.team.name.
+- This treats goal.team.name as the team of the player who scored the own goal.
+- If goal.team.name is missing, no own-goal award is recorded.
 
 4. First Two Teams to Extra Time
 - If score.duration is EXTRA_TIME or PENALTY_SHOOTOUT and first_extra_time_awarded is false, award both teams.
