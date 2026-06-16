@@ -136,7 +136,9 @@ Use the Run workflow button in GitHub Actions and set optional inputs:
 
 The script reads milestone message templates from [milestone_messages.yaml](milestone_messages.yaml).
 
-- Edit the message for any milestone key to customize the line shown in winner emails.
+- Set each milestone key to either a single string or a YAML list of strings.
+- If a milestone has multiple templates, the script picks one at random for each event.
+- Within one recipient email, the script avoids reusing the same template for a milestone until all templates for that milestone have been used.
 - Supported placeholders in each template: {team}, {milestone}, {name}.
 - If a milestone key is missing in the YAML file, the script falls back to a built-in default.
 - You can override the file path with environment variable MILESTONE_MESSAGES_FILE.
@@ -159,6 +161,17 @@ Useful debug flags:
 
 - Set DEBUG_MILESTONES=1 to print which milestones and teams were detected before participant filtering.
 - Set PERSIST_STATE_IN_DRY_RUN=1 if you want dry runs to update state.json (default is no state updates in dry run).
+- Set BLANK_STATE=1 to ignore existing state.json and treat the run as a fresh tournament-state simulation.
+
+Dry run from blank state (helpful when all recent matches are already marked processed):
+
+```bash
+DRY_RUN=1 \
+BLANK_STATE=1 \
+DEBUG_MILESTONES=1 \
+PARTICIPANTS_FILE=assigned_participants.tsv \
+python sweepstakes.py
+```
 
 Important API note:
 

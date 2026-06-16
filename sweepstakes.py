@@ -4,6 +4,7 @@ import csv
 import smtplib
 import ssl
 import os
+import random
 import yaml
 from email.message import EmailMessage
 
@@ -77,9 +78,28 @@ def parse_score_value(value):
     except (TypeError, ValueError):
         return None
 
-def load_state():
+def normalize_milestone_templates(template_value):
+    # I normalize a milestone template value into a non-empty list of strings.
+    if isinstance(template_value, str):
+        cleaned = template_value.strip()
+        return [cleaned] if cleaned else []
+
+    if isinstance(template_value, list):
+        templates = []
+        for item in template_value:
+            if isinstance(item, str):
+                cleaned = item.strip()
+                if cleaned:
+                    templates.append(cleaned)
+        return templates
+
+    return []
+
+def load_state(force_blank=False):
     # I load the state file to track the one-off milestones.
-    if os.path.exists(STATE_FILE):
+    if force_blank:
+        state = {}
+    elif os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, 'r') as f:
                 state = json.load(f)
@@ -105,7 +125,10 @@ def save_state(state):
 
 def load_milestone_messages(file_path=MILESTONE_MESSAGES_FILE):
     # I load custom milestone messages from YAML and fall back to defaults.
-    messages = DEFAULT_MILESTONE_MESSAGES.copy()
+    messages = {
+        milestone: normalize_milestone_templates(template)
+        for milestone, template in DEFAULT_MILESTONE_MESSAGES.items()
+    }
 
     if not os.path.exists(file_path):
         return messages
@@ -119,20 +142,36 @@ def load_milestone_messages(file_path=MILESTONE_MESSAGES_FILE):
 
     if not isinstance(loaded, dict):
         print(
-            f"Warning: Milestone messages file '{file_path}' must be a YAML map of milestone to message. "
+            f"Warning: Milestone messages file '{file_path}' must be a YAML map of milestone to message/list. "
             "Using defaults."
         )
         return messages
 
     for milestone, template in loaded.items():
-        if isinstance(milestone, str) and isinstance(template, str) and template.strip():
-            messages[milestone] = template.strip()
+        if not isinstance(milestone, str):
+            continue
+
+        normalized_templates = normalize_milestone_templates(template)
+        if normalized_templates:
+            messages[milestone] = normalized_templates
 
     return messages
 
-def render_milestone_message(milestone_messages, milestone, team, name):
-    # I render a message template safely for each milestone line.
-    template = milestone_messages.get(milestone, "{team} triggered this milestone.")
+def render_milestone_message(milestone_messages, milestone, team, name, used_templates_by_milestone=None):
+    # I render one random milestone template, avoiding repeats within a recipient email when possible.
+    templates = normalize_milestone_templates(milestone_messages.get(milestone))
+    if not templates:
+        templates = ["{team} triggered this milestone."]
+
+    if isinstance(used_templates_by_milestone, dict):
+        used_templates = used_templates_by_milestone.setdefault(milestone, set())
+        available_templates = [template for template in templates if template not in used_templates]
+        template_pool = available_templates if available_templates else templates
+        template = random.choice(template_pool)
+        used_templates.add(template)
+    else:
+        template = random.choice(templates)
+
     try:
         return template.format(team=team, milestone=milestone, name=name)
     except (KeyError, ValueError):
@@ -354,11 +393,11 @@ def check_standings():
     return results
 
 def get_team_milestone_summary(final_report):
-    # I map milestones directly to the teams.
+    # I map milestones directly to the teams, preserving repeated event occurrences.
     team_summary = {}
     for milestone, teams in final_report.items():
         if teams:
-            for team in set(teams):
+            for team in teams:
                 if team not in team_summary:
                     team_summary[team] = []
                 team_summary[team].append(milestone)
@@ -417,7 +456,8 @@ def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
             email = row[1].strip()
             name = row[2].strip()
             wants_updates = row[4].strip().lower().startswith('yes')
-            assigned_teams = [t.strip() for t in row[5].split(',')]
+            assigned_teams = [t.strip() for t in row[5].split(',') if t.strip()]
+            unique_assigned_teams = list(dict.fromkeys(assigned_teams))
 
             if not wants_updates or not email:
                 continue
@@ -427,32 +467,33 @@ def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
                     'email': email,
                     'name': name,
                     'entries': [],
-                    'seen': set(),
+                    'used_templates_by_milestone': {},
                 }
 
             target = targets_by_email[email]
             if not target['name'] and name:
                 target['name'] = name
 
-            for team in assigned_teams:
+            for team in unique_assigned_teams:
                 milestones = team_summary.get(team, [])
                 for milestone in milestones:
-                    key = (team, milestone)
-                    if key in target['seen']:
-                        continue
-
-                    target['seen'].add(key)
                     target['entries'].append({
                         'team': team,
                         'milestone': milestone,
-                        'message': render_milestone_message(milestone_messages, milestone, team, target['name']),
+                        'message': render_milestone_message(
+                            milestone_messages,
+                            milestone,
+                            team,
+                            target['name'],
+                            target['used_templates_by_milestone'],
+                        ),
                     })
 
     targets = []
     for email in sorted(targets_by_email.keys()):
         target = targets_by_email[email]
         if target['entries']:
-            target.pop('seen', None)
+            target.pop('used_templates_by_milestone', None)
             targets.append(target)
 
     return targets
@@ -512,6 +553,7 @@ def process_participants_and_email(team_summary, milestone_messages, tsv_file_pa
 if __name__ == "__main__":
     # I execute the full pipeline.
     dry_run = os.environ.get('DRY_RUN', '').lower() in {'1', 'true', 'yes'}
+    blank_state = os.environ.get('BLANK_STATE', '').lower() in {'1', 'true', 'yes'}
     persist_state_in_dry_run = os.environ.get('PERSIST_STATE_IN_DRY_RUN', '').lower() in {'1', 'true', 'yes'}
     debug_milestones = os.environ.get('DEBUG_MILESTONES', '').lower() in {'1', 'true', 'yes'}
     should_persist_state = not dry_run or persist_state_in_dry_run
@@ -524,7 +566,15 @@ if __name__ == "__main__":
             'otherwise no live milestones can be fetched.'
         )
 
-    state = load_state()
+    if blank_state:
+        print('BLANK_STATE enabled: ignoring existing state.json and starting from empty state for this run.')
+        if should_persist_state:
+            print(
+                'Warning: This run will persist a new state snapshot. '
+                'Use DRY_RUN=1 to keep this as a non-persistent test.'
+            )
+
+    state = load_state(force_blank=blank_state)
     processed_match_ids = set(state.get('processed_match_ids', []))
     print(f"Loaded {len(processed_match_ids)} previously processed match id(s) from state.")
     
