@@ -2,17 +2,72 @@
 # Supported placeholders: {team}, {milestone}, {name}
 
 
-Red Card: "🟥 Early bath! {team} saw RED in their latest match."
-90+ Minute Goal: "⏱️ ABSOLUTE LIMBS! {team} just grabbed a dramatic 90+ minute goal!"
-Own Goal: "🙈 Look away now... {team} just gifted the opposition an own goal."
-First Two Teams to Extra Time: "⏳ Going the distance! {team} featured in the tournament's first extra-time battle."
-Won Penalty Shootout: "🎯 Ice in their veins! Great news for {team} as they just won a penalty shootout."
-Giant Killer (Beat Top 5): "🦁 WHAT A SCALP! {team} just knocked out one of the top 5 favorites! Giant killer alert!"
-0-0 Boring Draw: "😴 Zzzzz... {team} was involved in an absolute 0-0 snorefest. At least you get a cookie."
-Scored 4+ Goals: "💥 Stop, stop, they're already dead! {team} ran completely riot with 4+ goals!!"
-Early Goal (First 5 mins): "⚡ Blink and you missed it! Early bird {team} scored in the first five minutes."
-First Goal of Tournament: "🚀 Kicking off the World Cup with an absolute bang! {team} scored the first goal of the tournament!"
-First Knockout Stage Goal: "🏆 The real tournament starts now. {team} just scored the first knockout-stage goal!"
-Arsenal Player Goal: "🔴 TOBI'S ARSENAL BIAS IN FULL EFFECT! A premier league winner just scored for {team}!"
-Max Group Points (9): "🔥 ON FIRE! {team} utterly dominated the group, finishing with a maximum 9 points!"
-Zero Group Points (0): "🥶 Ouch. {team} is heading home with zero points. A truly historic stinker."
+Red Card:
+	- "🟥 Early bath! {team} saw RED in their latest match."
+	- "🚨 Short-handed chaos! {team} picked up a red card."
+	- "🛁 Off you pop! {team} had a player sent marching."
+
+90+ Minute Goal:
+	- "⏱️ ABSOLUTE LIMBS! {team} just grabbed a dramatic 90+ minute goal!"
+	- "⏰ Last-gasp scenes! {team} struck deep into stoppage time."
+	- "🎬 Hollywood ending! {team} found a 90+ minute dagger."
+
+Own Goal:
+	- "🙈 Look away now... {team} just gifted the opposition an own goal."
+	- "😬 Nightmare moment for {team}: an own goal hit the net."
+	- "🤦 Heartbreak for {team}; they turned one into their own goal."
+
+First Two Teams to Extra Time:
+	- "⏳ Going the distance! {team} featured in the tournament's first extra-time battle."
+	- "🕰️ Bonus football unlocked! {team} featured in the first game to go beyond 90."
+	- "🥵 Legs gone, drama on: {team} was in the tournament's first extra-time showdown."
+
+Won Penalty Shootout:
+	- "🎯 Ice in their veins! Great news for {team} as they just won a penalty shootout."
+	- "🧊 Nerves of steel! {team} held their nerve in the shootout."
+	- "🎯 Spot-kick royalty: {team} survived penalties and came out on top."
+
+Giant Killer (Beat Top 5):
+	- "🦁 WHAT A SCALP! {team} just knocked out one of the top 5 favorites! Giant killer alert!"
+	- "⚔️ Cupset central! {team} toppled one of the top-5 giants."
+	- "🏰 Fortress breached! {team} sent a heavyweight packing."
+
+0-0 Boring Draw:
+	- "😴 Zzzzz... {team} was involved in an absolute 0-0 snorefest. At least you get a cookie."
+	- "🛌 Nil-nil and no thrills: {team} delivered a classic snoozefest."
+	- "🥱 Locked at 0-0, {team} served pure football lullaby."
+
+Scored 4+ Goals:
+	- "💥 Stop, stop, they're already dead! {team} ran completely riot with 4+ goals!!"
+	- "🔥 Goal buffet! {team} piled in four or more."
+	- "🚒 Somebody call the fire brigade, {team} hit 4+ and melted the net."
+
+Early Goal (First 5 mins):
+	- "⚡ Blink and you missed it! Early bird {team} scored in the first five minutes."
+	- "🏎️ Lightning start! {team} scored before everyone found their seats."
+	- "⚡ Fastest finger first: {team} landed one inside five minutes."
+
+First Goal of Tournament:
+	- "🚀 Kicking off the World Cup with an absolute bang! {team} scored the first goal of the tournament!"
+	- "🥇 History made! {team} bagged the tournament's opening goal."
+	- "🎉 First blood to {team}; they scored goal number one of the tournament."
+
+First Knockout Stage Goal:
+	- "🏆 The real tournament starts now. {team} just scored the first knockout-stage goal!"
+	- "🔓 Knockout mode activated: {team} scored the first goal of the eliminators."
+	- "🥊 First punch landed! {team} opened the knockout scoring."
+
+Arsenal Player Goal:
+	- "🔴 TOBI'S ARSENAL BIAS IN FULL EFFECT! A premier league winner just scored for {team}!"
+	- "🎯 North London delivery! An Arsenal player scored for {team}."
+	- "🔴 Arsenal alarm sounding: {team} got a goal from one of Tobi's boys."
+
+Max Group Points (9):
+	- "🔥 ON FIRE! {team} utterly dominated the group, finishing with a maximum 9 points!"
+	- "🏁 Perfect run! {team} finished the group with a clean 9 points."
+	- "✅ Flawless group stage from {team}: maximum points secured."
+
+Zero Group Points (0):
+	- "🥶 Ouch. {team} is heading home with zero points. A truly historic stinker."
+	- "🧊 Ice-cold campaign: {team} finished the group on zero points."
+	- "📉 Brutal group stage for {team}; they ended with 0 points."
