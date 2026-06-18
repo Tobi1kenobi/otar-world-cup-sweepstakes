@@ -25,6 +25,7 @@ DEFAULT_MILESTONE_MESSAGES = {
     "Red Card": "{team} saw red in the latest match.",
     "90+ Minute Goal": "{team} scored in stoppage time.",
     "Own Goal": "{team} had a player score an own goal in the latest match.",
+    "Hat Trick": "{team} had a player score a hat trick.",
     "First Two Teams to Extra Time": "{team} featured in the first extra-time game.",
     "Won Penalty Shootout": "{team} won a penalty shootout.",
     "Giant Killer (Beat Top 5)": "{team} pulled off a giant-killing result against a top-5 team.",
@@ -42,6 +43,7 @@ EVENT_BASED_MILESTONES = [
     "Red Card",
     "90+ Minute Goal",
     "Own Goal",
+    "Hat Trick",
     "Early Goal (First 5 mins)",
     "First Goal of Tournament",
     "First Knockout Stage Goal",
@@ -77,6 +79,22 @@ def parse_score_value(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+def is_own_goal(goal):
+    return goal.get('type') in ['OWN', 'OWN_GOAL']
+
+def get_opponent_team_name(team_name, home_team, away_team):
+    if team_name == home_team:
+        return away_team
+    if team_name == away_team:
+        return home_team
+    return None
+
+def get_goal_credit_team_name(goal, home_team, away_team):
+    goal_team = get_team_name(goal.get('team', {}))
+    if is_own_goal(goal):
+        return get_opponent_team_name(goal_team, home_team, away_team)
+    return goal_team
 
 def normalize_milestone_templates(template_value):
     # I normalize a milestone template value into a non-empty list of strings.
@@ -264,6 +282,7 @@ def process_milestones(matches, state):
     # I store the winning teams.
     results = {
         "Red Card": [], "90+ Minute Goal": [], "Own Goal": [],
+        "Hat Trick": [],
         "First Two Teams to Extra Time": [], "Won Penalty Shootout": [], "Giant Killer (Beat Top 5)": [],
         "0-0 Boring Draw": [], "Scored 4+ Goals": [], "Early Goal (First 5 mins)": [],
         "First Goal of Tournament": [], "First Knockout Stage Goal": [], "Arsenal Player Goal": []
@@ -327,31 +346,42 @@ def process_milestones(matches, state):
                 results["Giant Killer (Beat Top 5)"].append(winner)
 
         # I check in-game events.
+        goals_by_scorer_and_team = {}
         for goal in match.get('goals', []):
             minute = goal.get('minute', 0)
             scorer_name = goal.get('scorer', {}).get('name')
             goal_team = get_team_name(goal.get('team', {}))
+            credit_team = get_goal_credit_team_name(goal, home_team, away_team)
+            own_goal = is_own_goal(goal)
             
-            if goal.get('type') in ['OWN', 'OWN_GOAL'] and goal_team:
+            if own_goal and goal_team:
                 # I award own goals to the team of the player who scored the own goal.
                 results["Own Goal"].append(goal_team)
                 
-            if minute >= 90 and goal_team:
-                results["90+ Minute Goal"].append(goal_team)
+            if minute >= 90 and credit_team:
+                results["90+ Minute Goal"].append(credit_team)
                 
-            if minute <= 5 and goal_team:
-                results["Early Goal (First 5 mins)"].append(goal_team)
+            if minute <= 5 and credit_team:
+                results["Early Goal (First 5 mins)"].append(credit_team)
                 
-            if scorer_name in ARSENAL_PLAYERS and goal_team:
-                results["Arsenal Player Goal"].append(goal_team)
+            if not own_goal and scorer_name in ARSENAL_PLAYERS and credit_team:
+                results["Arsenal Player Goal"].append(credit_team)
                 
-            if goal_team and not state["first_goal_awarded"]:
-                results["First Goal of Tournament"].append(goal_team)
+            if credit_team and not state["first_goal_awarded"]:
+                results["First Goal of Tournament"].append(credit_team)
                 state["first_goal_awarded"] = True
                 
-            if goal_team and stage != 'GROUP_STAGE' and not state["first_ko_goal_awarded"]:
-                results["First Knockout Stage Goal"].append(goal_team)
+            if credit_team and stage != 'GROUP_STAGE' and not state["first_ko_goal_awarded"]:
+                results["First Knockout Stage Goal"].append(credit_team)
                 state["first_ko_goal_awarded"] = True
+
+            if not own_goal and scorer_name and credit_team:
+                scorer_key = (credit_team, scorer_name)
+                goals_by_scorer_and_team[scorer_key] = goals_by_scorer_and_team.get(scorer_key, 0) + 1
+
+        for (team_name, _scorer_name), goal_count in goals_by_scorer_and_team.items():
+            if goal_count >= 3:
+                results["Hat Trick"].append(team_name)
 
         for booking in match.get('bookings', []):
             if booking.get('card') in ['RED', 'RED_CARD', 'YELLOW_RED']:

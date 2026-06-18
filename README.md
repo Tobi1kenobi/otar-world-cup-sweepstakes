@@ -30,46 +30,53 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 - For each booking, if booking.card is RED, RED_CARD, or YELLOW_RED, award booking.team.name.
 
 2. 90+ Minute Goal
-- For each goal, if goal.minute >= 90 and goal.team.name exists, award goal.team.name.
+- For each goal, if goal.minute >= 90 and a credited scoring team can be determined, award the credited scoring team.
+- For own goals, this means the opponent of the team whose player scored the own goal; the conceding team does not receive this milestone.
 
 3. Own Goal
 - For each goal, if goal.type is OWN or OWN_GOAL and goal.team.name exists, award goal.team.name.
 - This treats goal.team.name as the team of the player who scored the own goal.
 - If goal.team.name is missing, no own-goal award is recorded.
 
-4. First Two Teams to Extra Time
+4. Hat Trick
+- For each match, count non-own goals by scorer and credited team.
+- If one player scores 3 or more non-own goals for the same team in a match, award that team once.
+- Own goals do not count toward a player's hat-trick total.
+
+5. First Two Teams to Extra Time
 - If score.duration is EXTRA_TIME or PENALTY_SHOOTOUT and first_extra_time_awarded is false, award both teams.
 - Then set first_extra_time_awarded to true.
 
-5. Won Penalty Shootout
+6. Won Penalty Shootout
 - If score.duration is PENALTY_SHOOTOUT and penalties.home > penalties.away, award home team.
 - If score.duration is PENALTY_SHOOTOUT and penalties.away > penalties.home, award away team.
 
-6. Giant Killer (Beat Top 5)
+7. Giant Killer (Beat Top 5)
 - Only for stage != GROUP_STAGE.
 - Determine winner/loser from score.winner (HOME_TEAM or AWAY_TEAM).
 - If loser is one of Argentina, Spain, England, France, Brazil, award winner.
 
-7. 0-0 Boring Draw
+8. 0-0 Boring Draw
 - If fullTime.home == 0 and fullTime.away == 0, award both teams.
 
-8. Scored 4+ Goals
+9. Scored 4+ Goals
 - If fullTime.home >= 4, award home team.
 - If fullTime.away >= 4, award away team.
+- This is based on the final score, so own goals still count toward the benefiting team's match total.
 
-9. Early Goal (First 5 mins)
-- For each goal, if goal.minute <= 5 and goal.team.name exists, award goal.team.name.
+10. Early Goal (First 5 mins)
+- For each goal, if goal.minute <= 5 and a credited scoring team can be determined, award the credited scoring team.
 
-10. First Goal of Tournament
-- For each goal in chronological match order, if goal.team.name exists and first_goal_awarded is false, award that team.
+11. First Goal of Tournament
+- For each goal in chronological match order, if a credited scoring team can be determined and first_goal_awarded is false, award that team.
 - Then set first_goal_awarded to true.
 
-11. First Knockout Stage Goal
-- For each goal, if stage != GROUP_STAGE, goal.team.name exists, and first_ko_goal_awarded is false, award that team.
+12. First Knockout Stage Goal
+- For each goal, if stage != GROUP_STAGE, a credited scoring team can be determined, and first_ko_goal_awarded is false, award that team.
 - Then set first_ko_goal_awarded to true.
 
-12. Arsenal Player Goal
-- For each goal, if goal.scorer.name is in ARSENAL_PLAYERS and goal.team.name exists, award goal.team.name.
+13. Arsenal Player Goal
+- For each non-own goal, if goal.scorer.name is in ARSENAL_PLAYERS and a credited scoring team can be determined, award that team.
 
 ### Standings Milestones
 
