@@ -528,6 +528,76 @@ def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
 
     return targets
 
+def get_cookie_leaderboard(team_summary, tsv_file_path):
+    # I rank participants by cookie count and keep every team+milestone reason.
+    leaderboard = []
+
+    if not os.path.exists(tsv_file_path):
+        raise FileNotFoundError(
+            f"Participants file '{tsv_file_path}' was not found. "
+            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV "
+            "or use PARTICIPANTS_FILE=assigned_participants.tsv for dry runs."
+        )
+
+    with open(tsv_file_path, mode='r', encoding='utf-8') as file:
+        reader = csv.reader(file, delimiter='\t')
+        next(reader, None)
+
+        for row in reader:
+            if len(row) < 6:
+                continue
+
+            email = row[1].strip()
+            name = row[2].strip()
+            assigned_teams = [t.strip() for t in row[5].split(',') if t.strip()]
+            unique_assigned_teams = list(dict.fromkeys(assigned_teams))
+
+            reasons = []
+            for team in unique_assigned_teams:
+                for milestone in team_summary.get(team, []):
+                    reasons.append(f"{team} [{milestone}]")
+
+            sort_name = name.lower() if name else email.lower()
+            leaderboard.append({
+                'name': name,
+                'email': email,
+                'cookie_count': len(reasons),
+                'reasons': reasons,
+                'sort_name': sort_name,
+            })
+
+    leaderboard.sort(
+        key=lambda participant: (
+            -participant['cookie_count'],
+            participant['sort_name'],
+            participant['email'].lower(),
+        )
+    )
+    return leaderboard
+
+def print_cookie_leaderboard(team_summary, tsv_file_path):
+    # I print a ranked cookie table with all reasons for each participant.
+    leaderboard = get_cookie_leaderboard(team_summary, tsv_file_path)
+    print(f"LEADERBOARD mode enabled. Ranked {len(leaderboard)} participant(s) by total cookies.")
+
+    if not leaderboard:
+        print('No participants found in the selected participants file.')
+        return leaderboard
+
+    for position, participant in enumerate(leaderboard, start=1):
+        cookie_count = participant['cookie_count']
+        cookie_label = 'World Cup Cookie' if cookie_count == 1 else 'World Cup Cookies'
+        display_name = participant['name'] or participant['email'] or 'Unknown participant'
+        email_suffix = f" ({participant['email']})" if participant['name'] and participant['email'] else ''
+
+        print(f"{position}. {display_name}{email_suffix}: {cookie_count} {cookie_label}")
+        if participant['reasons']:
+            print(f"   Reasons: {', '.join(participant['reasons'])}")
+        else:
+            print("   Reasons: none yet.")
+
+    return leaderboard
+
 def process_participants_and_email(team_summary, milestone_messages, tsv_file_path='assigned_participants.tsv', dry_run=False):
     # I read the TSV and send (or simulate) emails to winners.
     targets = get_notification_targets(team_summary, milestone_messages, tsv_file_path)
@@ -586,9 +656,20 @@ if __name__ == "__main__":
     blank_state = os.environ.get('BLANK_STATE', '').lower() in {'1', 'true', 'yes'}
     persist_state_in_dry_run = os.environ.get('PERSIST_STATE_IN_DRY_RUN', '').lower() in {'1', 'true', 'yes'}
     debug_milestones = os.environ.get('DEBUG_MILESTONES', '').lower() in {'1', 'true', 'yes'}
-    should_persist_state = not dry_run or persist_state_in_dry_run
+    leaderboard_mode = os.environ.get('LEADERBOARD', '').lower() in {'1', 'true', 'yes'}
     participants_file = os.environ.get('PARTICIPANTS_FILE', 'assigned_participants.tsv')
     milestone_messages_file = os.environ.get('MILESTONE_MESSAGES_FILE', MILESTONE_MESSAGES_FILE)
+
+    if leaderboard_mode:
+        if not dry_run:
+            print('LEADERBOARD enabled: forcing DRY_RUN behavior (no emails will be sent).')
+        if not blank_state:
+            print('LEADERBOARD enabled: forcing BLANK_STATE behavior (full-tournament scoring).')
+        dry_run = True
+        blank_state = True
+        persist_state_in_dry_run = False
+
+    should_persist_state = not dry_run or persist_state_in_dry_run
 
     if API_KEY in {'', 'YOUR_NEW_TOKEN', 'YOUR_NEW_TOKEN_HERE'}:
         print(
@@ -629,7 +710,10 @@ if __name__ == "__main__":
     if debug_milestones:
         print_milestone_debug_summary(final_report, team_summary)
     
-    if team_summary:
+    if leaderboard_mode:
+        leaderboard = print_cookie_leaderboard(team_summary, participants_file)
+        print(f"Prepared leaderboard for {len(leaderboard)} participant(s).")
+    elif team_summary:
         notifications = process_participants_and_email(
             team_summary,
             milestone_messages,
