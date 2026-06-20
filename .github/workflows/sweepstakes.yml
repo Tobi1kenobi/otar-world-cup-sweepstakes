@@ -16,6 +16,14 @@ on:
         options:
           - 'true'
           - 'false'
+      leaderboard:
+        description: 'Leaderboard mode: force empty-state dry run and print ranked cookies with reasons'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
       participants_file:
         description: 'Participant file to use for this run'
         required: false
@@ -81,6 +89,7 @@ jobs:
           SCHEDULE_HOUR_UTC: '8'
           PARTICIPANTS_FILE: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file || 'assigned_participants_real.tsv' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true' && '1' || '' }}
+          LEADERBOARD: ${{ github.event_name == 'workflow_dispatch' && inputs.leaderboard == 'true' && '1' || '' }}
         run: python sweepstakes.py
 
       - name: Commit updated state

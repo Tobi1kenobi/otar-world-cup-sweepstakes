@@ -8,6 +8,7 @@ Automated World Cup sweepstakes scoring and winner notifications using the footb
 - Applies milestone rules (red cards, own goals, first goal, penalties, and more).
 - Maps winning teams to participants.
 - Sends one consolidated winner email per participant per run (or prints in dry-run mode).
+- Supports a leaderboard mode that ranks participants by cookies and lists all team/milestone reasons.
 - Supports milestone-specific message templates via milestone_messages.yaml.
 - Persists one-off milestone flags and processed match IDs in state.json.
 
@@ -132,6 +133,7 @@ If personal data was committed previously, make sure to rotate any exposed crede
 Use the Run workflow button in GitHub Actions and set optional inputs:
 
 - dry_run: choose `true` (default, preview only) or `false` (live send).
+- leaderboard: choose `true` to force an empty-state dry run and print a ranked cookie leaderboard with full reasons.
 - dry_run does not update state.json by default, so you can rerun previews without consuming matches.
 - To force state updates during dry runs, set PERSIST_STATE_IN_DRY_RUN=1.
 - participants_file: defaults to assigned_participants.tsv for safer manual tests.
@@ -169,6 +171,7 @@ Useful debug flags:
 - Set DEBUG_MILESTONES=1 to print which milestones and teams were detected before participant filtering.
 - Set PERSIST_STATE_IN_DRY_RUN=1 if you want dry runs to update state.json (default is no state updates in dry run).
 - Set BLANK_STATE=1 to ignore existing state.json and treat the run as a fresh tournament-state simulation.
+- Set LEADERBOARD=1 to force a non-persistent empty-state run and print ranked cookie totals with reasons like `Netherlands [Red Card]`.
 
 Dry run from blank state (helpful when all recent matches are already marked processed):
 
@@ -176,6 +179,14 @@ Dry run from blank state (helpful when all recent matches are already marked pro
 DRY_RUN=1 \
 BLANK_STATE=1 \
 DEBUG_MILESTONES=1 \
+PARTICIPANTS_FILE=assigned_participants.tsv \
+python sweepstakes.py
+```
+
+Leaderboard mode (auto-forces dry-run + empty-state behavior):
+
+```bash
+LEADERBOARD=1 \
 PARTICIPANTS_FILE=assigned_participants.tsv \
 python sweepstakes.py
 ```
