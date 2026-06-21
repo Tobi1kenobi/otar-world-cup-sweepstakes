@@ -8,9 +8,9 @@ Automated World Cup sweepstakes scoring and winner notifications using the footb
 - Applies milestone rules (red cards, own goals, first goal, penalties, and more).
 - Maps winning teams to participants.
 - Sends one consolidated winner email per participant per run (or prints in dry-run mode).
-- Supports a leaderboard mode that ranks participants by cookies and lists all team/milestone reasons.
+- Supports weekly leaderboard mode for both participant groups, with climbs/slips and milestone changes since each group's previous leaderboard.
 - Supports milestone-specific message templates via milestone_messages.yaml.
-- Persists one-off milestone flags and processed match IDs in state.json.
+- Persists one-off milestone flags and processed match IDs in state files (`state.json` by default, `state_second_group.json` for the second group schedule).
 
 ## Exact Rules Checked
 
@@ -89,16 +89,17 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 
 ### One-Off Tournament Flags
 
-1. first_goal_awarded, first_ko_goal_awarded, and first_extra_time_awarded are persisted in state.json.
+1. first_goal_awarded, first_ko_goal_awarded, and first_extra_time_awarded are persisted in the active state file (`state.json` by default, override with `STATE_FILE`).
 2. These prevent re-awarding the same one-off milestone in later runs.
-3. They reset only if state.json is edited/reset.
+3. They reset only if the active state file is edited/reset.
 
 ## Schedule Logic
 
-- Scheduled workflow runs at 08:00 UTC Monday-Friday.
-- Tuesday-Friday scheduled runs process the preceding 24 hours.
-- Monday scheduled run catches up from Friday 08:00 UTC to Monday 08:00 UTC.
-- Manual runs default to the preceding 24 hours unless you provide WINDOW_START_UTC and WINDOW_END_UTC.
+- Scheduled workflow runs at 06:00 UTC Monday-Friday for the second participant group (`assigned_participants_second_group.tsv` + `state_second_group.json`).
+- Scheduled workflow runs at 06:30 UTC every Wednesday for second-group leaderboard generation (emailed to `BCC_EMAIL` only).
+- Scheduled workflow runs at 07:00 UTC every Wednesday for primary-group leaderboard generation (emailed to `BCC_EMAIL` only).
+- Scheduled workflow runs at 08:00 UTC Monday-Friday for the primary participant group (`assigned_participants_real.tsv` + `state.json`).
+- Manual runs use `participants_file` from workflow dispatch and can also override `STATE_FILE` locally.
 
 ## GitHub Setup
 
@@ -108,10 +109,11 @@ Required repository secrets:
 - SENDER_EMAIL
 - SENDER_PASSWORD
 - PARTICIPANTS_REAL_TSV
+- PARTICIPANTS_SECOND_GROUP_TSV
 
 Optional repository secret:
 
-- BCC_EMAIL (if set, every winner email includes this address in Bcc)
+- BCC_EMAIL (required for leaderboard emails; optional for normal winner notifications)
 
 Workflow file: [.github/workflows/sweepstakes.yml](.github/workflows/sweepstakes.yml)
 
@@ -121,10 +123,13 @@ Recommended approach:
 
 1. Do not commit [assigned_participants_real.tsv](assigned_participants_real.tsv) to a public repository.
 2. Store the raw TSV content in a GitHub Secret named PARTICIPANTS_REAL_TSV.
-3. Let the workflow materialize [assigned_participants_real.tsv](assigned_participants_real.tsv) at runtime from that secret.
-4. Keep only non-sensitive sample data in [assigned_participants.tsv](assigned_participants.tsv).
+3. Store second-group raw TSV content in a GitHub Secret named PARTICIPANTS_SECOND_GROUP_TSV.
+4. Let the workflow materialize [assigned_participants_real.tsv](assigned_participants_real.tsv) and [assigned_participants_second_group.tsv](assigned_participants_second_group.tsv) at runtime from those secrets.
+5. Keep only non-sensitive sample data in [assigned_participants.tsv](assigned_participants.tsv).
 
-To set the secret value, open [assigned_participants_real.tsv](assigned_participants_real.tsv) and paste the raw file contents directly into the GitHub secret named PARTICIPANTS_REAL_TSV. No encoding is required.
+To set each secret value, open the corresponding TSV and paste the raw file contents directly into the matching GitHub secret (`PARTICIPANTS_REAL_TSV` or `PARTICIPANTS_SECOND_GROUP_TSV`). No encoding is required.
+
+Leaderboard snapshots are persisted separately per group (`leaderboard_state_primary.json` and `leaderboard_state_second_group.json`) and intentionally store only anonymous slot/rank/count data. They do not persist participant names, emails, or assigned teams from TSV files.
 
 If personal data was committed previously, make sure to rotate any exposed credentials and consider rewriting git history before making the repository public.
 
@@ -133,13 +138,12 @@ If personal data was committed previously, make sure to rotate any exposed crede
 Use the Run workflow button in GitHub Actions and set optional inputs:
 
 - dry_run: choose `true` (default, preview only) or `false` (live send).
-- leaderboard: choose `true` to force an empty-state dry run and print a ranked cookie leaderboard with full reasons.
-- dry_run does not update state.json by default, so you can rerun previews without consuming matches.
+- leaderboard: choose `true` to generate leaderboard output with rank movement and weekly milestone deltas.
+- dry_run does not update the active state file by default, so you can rerun previews without consuming matches.
 - To force state updates during dry runs, set PERSIST_STATE_IN_DRY_RUN=1.
 - participants_file: defaults to assigned_participants.tsv for safer manual tests.
 - participants_file can be switched to assigned_participants_real.tsv for real notifications.
-- window_start_utc: optional ISO UTC timestamp, for example 2026-06-12T08:00:00Z.
-- window_end_utc: optional ISO UTC timestamp, for example 2026-06-13T08:00:00Z.
+- participants_file can also be switched to assigned_participants_second_group.tsv for the second group.
 
 ## Custom Milestone Messages (YAML)
 
@@ -169,9 +173,11 @@ DRY_RUN=1 PARTICIPANTS_FILE=assigned_participants.tsv python sweepstakes.py
 Useful debug flags:
 
 - Set DEBUG_MILESTONES=1 to print which milestones and teams were detected before participant filtering.
-- Set PERSIST_STATE_IN_DRY_RUN=1 if you want dry runs to update state.json (default is no state updates in dry run).
-- Set BLANK_STATE=1 to ignore existing state.json and treat the run as a fresh tournament-state simulation.
-- Set LEADERBOARD=1 to force a non-persistent empty-state run and print ranked cookie totals with reasons like `Netherlands [Red Card]`.
+- Set PERSIST_STATE_IN_DRY_RUN=1 if you want dry runs to update the active state file (default is no state updates in dry run).
+- Set BLANK_STATE=1 to ignore the active state file and treat the run as a fresh tournament-state simulation.
+- Set LEADERBOARD=1 to force blank-state scoring, print ranked cookie totals, and include week-over-week movement and milestone deltas.
+- Set STATE_FILE=state_second_group.json to keep the second group's processed-match history separate from the primary group.
+- Set LEADERBOARD_STATE_FILE=leaderboard_state_primary.json (or `leaderboard_state_second_group.json`) to control where leaderboard snapshots are read/written.
 
 Dry run from blank state (helpful when all recent matches are already marked processed):
 
@@ -183,10 +189,11 @@ PARTICIPANTS_FILE=assigned_participants.tsv \
 python sweepstakes.py
 ```
 
-Leaderboard mode (auto-forces dry-run + empty-state behavior):
+Leaderboard mode (auto-forces empty-state scoring and compares against the previous leaderboard snapshot):
 
 ```bash
 LEADERBOARD=1 \
+DRY_RUN=1 \
 PARTICIPANTS_FILE=assigned_participants.tsv \
 python sweepstakes.py
 ```
@@ -206,10 +213,18 @@ PARTICIPANTS_FILE=assigned_participants_real.tsv \
 python sweepstakes.py
 ```
 
-Live local run (sends real email):
+Live local run (sends real winner emails):
 
 ```bash
 PARTICIPANTS_FILE=assigned_participants_real.tsv python sweepstakes.py
+```
+
+Live local run for the second participant group (separate state):
+
+```bash
+PARTICIPANTS_FILE=assigned_participants_second_group.tsv \
+STATE_FILE=state_second_group.json \
+python sweepstakes.py
 ```
 
 ## API Cross-Reference (Quickstart + v4 Reference)

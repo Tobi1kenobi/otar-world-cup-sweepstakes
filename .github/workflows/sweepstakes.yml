@@ -2,8 +2,13 @@ name: World Cup Biscuit Sweepstakes
 
 on:
   schedule:
-    # This cron runs at 08:00 UTC, Monday through Friday. 
-    # During the summer, the UK is on BST (UTC+1), so 08:00 UTC = 09:00 UK time.
+    # Second participant group notifications (Mon-Fri 06:00 UTC).
+    - cron: '0 6 * * 1-5'
+    # Weekly second-group leaderboard email (Wednesday 06:30 UTC).
+    - cron: '30 6 * * 3'
+    # Weekly leaderboard email (Wednesday 07:00 UTC).
+    - cron: '0 7 * * 3'
+    # Primary participant group notifications (Mon-Fri 08:00 UTC).
     - cron: '0 8 * * 1-5'
   workflow_dispatch:
     # This allows you to click a button on GitHub to run it manually anytime.
@@ -17,7 +22,7 @@ on:
           - 'true'
           - 'false'
       leaderboard:
-        description: 'Leaderboard mode: force empty-state dry run and print ranked cookies with reasons'
+        description: 'Leaderboard mode: generate ranked cookies with movement and milestone deltas'
         required: false
         default: 'false'
         type: choice
@@ -31,6 +36,7 @@ on:
         type: choice
         options:
           - assigned_participants_real.tsv
+          - assigned_participants_second_group.tsv
           - assigned_participants.tsv
 
 jobs:
@@ -50,13 +56,76 @@ jobs:
       - name: Install dependencies
         run: pip install requests pyyaml
 
-      - name: Create private participants file for scheduled runs
-        if: ${{ github.event_name == 'schedule' }}
+      - name: Resolve runtime settings
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || '' }}
+          INPUT_LEADERBOARD: ${{ github.event_name == 'workflow_dispatch' && inputs.leaderboard || '' }}
+          INPUT_PARTICIPANTS_FILE: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file || '' }}
+        run: |
+          PARTICIPANTS_FILE="assigned_participants_real.tsv"
+          DRY_RUN=""
+          LEADERBOARD=""
+          STATE_FILE="state.json"
+          LEADERBOARD_STATE_FILE="leaderboard_state_primary.json"
+
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            case "$EVENT_SCHEDULE" in
+              '0 6 * * 1-5')
+                PARTICIPANTS_FILE="assigned_participants_second_group.tsv"
+                STATE_FILE="state_second_group.json"
+                LEADERBOARD_STATE_FILE="leaderboard_state_second_group.json"
+                ;;
+              '30 6 * * 3')
+                PARTICIPANTS_FILE="assigned_participants_second_group.tsv"
+                STATE_FILE="state_second_group.json"
+                LEADERBOARD="1"
+                LEADERBOARD_STATE_FILE="leaderboard_state_second_group.json"
+                ;;
+              '0 7 * * 3')
+                PARTICIPANTS_FILE="assigned_participants_real.tsv"
+                LEADERBOARD="1"
+                LEADERBOARD_STATE_FILE="leaderboard_state_primary.json"
+                ;;
+              '0 8 * * 1-5')
+                PARTICIPANTS_FILE="assigned_participants_real.tsv"
+                LEADERBOARD_STATE_FILE="leaderboard_state_primary.json"
+                ;;
+              *)
+                echo "Unsupported schedule: $EVENT_SCHEDULE" >&2
+                exit 1
+                ;;
+            esac
+          else
+            PARTICIPANTS_FILE="$INPUT_PARTICIPANTS_FILE"
+            if [ "$INPUT_DRY_RUN" = "true" ]; then
+              DRY_RUN="1"
+            fi
+            if [ "$INPUT_LEADERBOARD" = "true" ]; then
+              LEADERBOARD="1"
+            fi
+            if [ "$PARTICIPANTS_FILE" = "assigned_participants_second_group.tsv" ]; then
+              STATE_FILE="state_second_group.json"
+              LEADERBOARD_STATE_FILE="leaderboard_state_second_group.json"
+            else
+              LEADERBOARD_STATE_FILE="leaderboard_state_primary.json"
+            fi
+          fi
+
+          echo "PARTICIPANTS_FILE=$PARTICIPANTS_FILE" >> "$GITHUB_ENV"
+          echo "DRY_RUN=$DRY_RUN" >> "$GITHUB_ENV"
+          echo "LEADERBOARD=$LEADERBOARD" >> "$GITHUB_ENV"
+          echo "STATE_FILE=$STATE_FILE" >> "$GITHUB_ENV"
+          echo "LEADERBOARD_STATE_FILE=$LEADERBOARD_STATE_FILE" >> "$GITHUB_ENV"
+
+      - name: Create private participants file for primary-group runs
+        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 7 * * 3' || github.event.schedule == '0 8 * * 1-5')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv') }}
         env:
           PARTICIPANTS_REAL_TSV: ${{ secrets.PARTICIPANTS_REAL_TSV }}
         run: |
           if [ -z "$PARTICIPANTS_REAL_TSV" ]; then
-            echo "Secret PARTICIPANTS_REAL_TSV is required for scheduled runs." >&2
+            echo "Secret PARTICIPANTS_REAL_TSV is required when running with assigned_participants_real.tsv." >&2
             exit 1
           fi
           printf '%s' "$PARTICIPANTS_REAL_TSV" > assigned_participants_real.tsv
@@ -65,18 +134,18 @@ jobs:
             exit 1
           fi
 
-      - name: Create private participants file for manual real-data runs
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv' }}
+      - name: Create private participants file for second-group runs
+        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 6 * * 1-5' || github.event.schedule == '30 6 * * 3')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_second_group.tsv') }}
         env:
-          PARTICIPANTS_REAL_TSV: ${{ secrets.PARTICIPANTS_REAL_TSV }}
+          PARTICIPANTS_SECOND_GROUP_TSV: ${{ secrets.PARTICIPANTS_SECOND_GROUP_TSV }}
         run: |
-          if [ -z "$PARTICIPANTS_REAL_TSV" ]; then
-            echo "Secret PARTICIPANTS_REAL_TSV is required when participants_file is assigned_participants_real.tsv." >&2
+          if [ -z "$PARTICIPANTS_SECOND_GROUP_TSV" ]; then
+            echo "Secret PARTICIPANTS_SECOND_GROUP_TSV is required when running with assigned_participants_second_group.tsv." >&2
             exit 1
           fi
-          printf '%s' "$PARTICIPANTS_REAL_TSV" > assigned_participants_real.tsv
-          if ! awk -F '\t' 'NR == 1 { exit !(NF >= 6) }' assigned_participants_real.tsv; then
-            echo "Secret PARTICIPANTS_REAL_TSV must be raw TSV content with at least 6 tab-separated columns in the header." >&2
+          printf '%s' "$PARTICIPANTS_SECOND_GROUP_TSV" > assigned_participants_second_group.tsv
+          if ! awk -F '\t' 'NR == 1 { exit !(NF >= 6) }' assigned_participants_second_group.tsv; then
+            echo "Secret PARTICIPANTS_SECOND_GROUP_TSV must be raw TSV content with at least 6 tab-separated columns in the header." >&2
             exit 1
           fi
 
@@ -86,15 +155,15 @@ jobs:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           BCC_EMAIL: ${{ secrets.BCC_EMAIL }}
-          SCHEDULE_HOUR_UTC: '8'
-          PARTICIPANTS_FILE: ${{ github.event_name == 'workflow_dispatch' && inputs.participants_file || 'assigned_participants_real.tsv' }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true' && '1' || '' }}
-          LEADERBOARD: ${{ github.event_name == 'workflow_dispatch' && inputs.leaderboard == 'true' && '1' || '' }}
         run: python sweepstakes.py
 
       - name: Commit updated state
         run: |
           git config --global user.name 'GitHub Action'
           git config --global user.email 'action@github.com'
-          git add state.json
+          for state_file in state.json state_second_group.json leaderboard_state_primary.json leaderboard_state_second_group.json; do
+            if [ -f "$state_file" ]; then
+              git add "$state_file"
+            fi
+          done
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update sweepstakes state" && git push)

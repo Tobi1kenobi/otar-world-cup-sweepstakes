@@ -6,13 +6,18 @@ import ssl
 import os
 import random
 import yaml
+from collections import Counter
+from datetime import datetime, timezone
 from email.message import EmailMessage
 
 # I set the configuration variables.
 API_KEY = os.environ.get('API_KEY', 'YOUR_NEW_TOKEN_HERE')
 HEADERS = {'X-Auth-Token': API_KEY}
 BASE_URL = 'https://api.football-data.org/v4'
-STATE_FILE = 'state.json'
+DEFAULT_STATE_FILE = 'state.json'
+DEFAULT_LEADERBOARD_STATE_FILE = 'leaderboard_state_primary.json'
+SECOND_GROUP_PARTICIPANTS_FILE = 'assigned_participants_second_group.tsv'
+SECOND_GROUP_LEADERBOARD_STATE_FILE = 'leaderboard_state_second_group.json'
 MILESTONE_MESSAGES_FILE = 'milestone_messages.yaml'
 REQUEST_TIMEOUT_SECONDS = 30
 
@@ -113,13 +118,13 @@ def normalize_milestone_templates(template_value):
 
     return []
 
-def load_state(force_blank=False):
+def load_state(state_file_path=DEFAULT_STATE_FILE, force_blank=False):
     # I load the state file to track the one-off milestones.
     if force_blank:
         state = {}
-    elif os.path.exists(STATE_FILE):
+    elif os.path.exists(state_file_path):
         try:
-            with open(STATE_FILE, 'r') as f:
+            with open(state_file_path, 'r') as f:
                 state = json.load(f)
         except (json.JSONDecodeError, OSError):
             state = {}
@@ -136,9 +141,9 @@ def load_state(force_blank=False):
 
     return state
 
-def save_state(state):
+def save_state(state, state_file_path=DEFAULT_STATE_FILE):
     # I save the updated state back to the file.
-    with open(STATE_FILE, 'w') as f:
+    with open(state_file_path, 'w') as f:
         json.dump(state, f, indent=2, sort_keys=True)
 
 def load_milestone_messages(file_path=MILESTONE_MESSAGES_FILE):
@@ -471,8 +476,9 @@ def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
     if not os.path.exists(tsv_file_path):
         raise FileNotFoundError(
             f"Participants file '{tsv_file_path}' was not found. "
-            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV "
-            "or use PARTICIPANTS_FILE=assigned_participants.tsv for dry runs."
+            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV or "
+            "PARTICIPANTS_SECOND_GROUP_TSV as needed, or use PARTICIPANTS_FILE=assigned_participants.tsv "
+            "for dry runs."
         )
 
     with open(tsv_file_path, mode='r', encoding='utf-8') as file:
@@ -528,6 +534,32 @@ def get_notification_targets(team_summary, milestone_messages, tsv_file_path):
 
     return targets
 
+def get_default_leaderboard_state_file(tsv_file_path):
+    participant_file_name = os.path.basename((tsv_file_path or '').strip().lower())
+    if participant_file_name == SECOND_GROUP_PARTICIPANTS_FILE.lower():
+        return SECOND_GROUP_LEADERBOARD_STATE_FILE
+    return DEFAULT_LEADERBOARD_STATE_FILE
+
+def get_milestone_counter(raw_counts):
+    counts = Counter()
+    if not isinstance(raw_counts, dict):
+        return counts
+
+    for milestone, value in raw_counts.items():
+        if not isinstance(milestone, str):
+            continue
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            counts[milestone] = count
+
+    return counts
+
+def get_participant_slot_id(slot_number):
+    return f"slot:{slot_number}"
+
 def get_cookie_leaderboard(team_summary, tsv_file_path):
     # I rank participants by cookie count and keep every team+milestone reason.
     leaderboard = []
@@ -535,34 +567,47 @@ def get_cookie_leaderboard(team_summary, tsv_file_path):
     if not os.path.exists(tsv_file_path):
         raise FileNotFoundError(
             f"Participants file '{tsv_file_path}' was not found. "
-            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV "
-            "or use PARTICIPANTS_FILE=assigned_participants.tsv for dry runs."
+            "If this is a GitHub Actions run, set secret PARTICIPANTS_REAL_TSV or "
+            "PARTICIPANTS_SECOND_GROUP_TSV as needed, or use PARTICIPANTS_FILE=assigned_participants.tsv "
+            "for dry runs."
         )
 
     with open(tsv_file_path, mode='r', encoding='utf-8') as file:
         reader = csv.reader(file, delimiter='\t')
         next(reader, None)
 
+        participant_slot = 0
         for row in reader:
             if len(row) < 6:
                 continue
 
+            participant_slot += 1
             email = row[1].strip()
             name = row[2].strip()
             assigned_teams = [t.strip() for t in row[5].split(',') if t.strip()]
             unique_assigned_teams = list(dict.fromkeys(assigned_teams))
 
             reasons = []
+            milestone_counts = Counter()
             for team in unique_assigned_teams:
                 for milestone in team_summary.get(team, []):
                     reasons.append(f"{team} [{milestone}]")
+                    milestone_counts[milestone] += 1
 
-            sort_name = name.lower() if name else email.lower()
+            if name:
+                sort_name = name.lower()
+            elif email:
+                sort_name = email.lower()
+            else:
+                sort_name = get_participant_slot_id(participant_slot)
+
             leaderboard.append({
+                'participant_slot_id': get_participant_slot_id(participant_slot),
                 'name': name,
                 'email': email,
                 'cookie_count': len(reasons),
                 'reasons': reasons,
+                'milestone_counts': dict(milestone_counts),
                 'sort_name': sort_name,
             })
 
@@ -575,28 +620,231 @@ def get_cookie_leaderboard(team_summary, tsv_file_path):
     )
     return leaderboard
 
-def print_cookie_leaderboard(team_summary, tsv_file_path):
-    # I print a ranked cookie table with all reasons for each participant.
-    leaderboard = get_cookie_leaderboard(team_summary, tsv_file_path)
-    print(f"LEADERBOARD mode enabled. Ranked {len(leaderboard)} participant(s) by total cookies.")
+def load_leaderboard_snapshot(file_path=DEFAULT_LEADERBOARD_STATE_FILE):
+    if not os.path.exists(file_path):
+        return {}
 
-    if not leaderboard:
-        print('No participants found in the selected participants file.')
-        return leaderboard
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            snapshot = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return {}
 
-    for position, participant in enumerate(leaderboard, start=1):
-        cookie_count = participant['cookie_count']
+    return snapshot if isinstance(snapshot, dict) else {}
+
+def save_leaderboard_snapshot(snapshot, file_path=DEFAULT_LEADERBOARD_STATE_FILE):
+    with open(file_path, 'w', encoding='utf-8') as file:
+        json.dump(snapshot, file, indent=2, sort_keys=True)
+
+def get_rank_movement_text(participant):
+    movement = participant.get('movement', 'new')
+    movement_delta = participant.get('movement_delta', 0)
+    previous_rank = participant.get('previous_rank')
+
+    if movement == 'climbed':
+        return f"climbed {movement_delta} place(s) from #{previous_rank}"
+    if movement == 'slipped':
+        return f"slipped {movement_delta} place(s) from #{previous_rank}"
+    if movement == 'unchanged':
+        return f"unchanged from #{previous_rank}"
+    return "new to leaderboard"
+
+def format_milestone_delta_entries(milestone_deltas):
+    formatted = []
+    for entry in milestone_deltas:
+        count_suffix = f" x{entry['count']}" if entry['count'] > 1 else ''
+        formatted.append(f"{entry['milestone']}{count_suffix}")
+    return ', '.join(formatted) if formatted else 'none.'
+
+def build_leaderboard_report(leaderboard, previous_snapshot=None):
+    previous_snapshot = previous_snapshot if isinstance(previous_snapshot, dict) else {}
+    previous_participants = previous_snapshot.get('participants', [])
+    previous_by_key = {}
+
+    if isinstance(previous_participants, list):
+        for participant in previous_participants:
+            if not isinstance(participant, dict):
+                continue
+            participant_slot_id = participant.get('participant_slot_id')
+            if participant_slot_id:
+                previous_by_key[participant_slot_id] = participant
+
+    report_participants = []
+    climbers = []
+    slippers = []
+
+    for rank, participant in enumerate(leaderboard, start=1):
+        participant_slot_id = participant.get('participant_slot_id')
+        previous_participant = previous_by_key.get(participant_slot_id, {})
+        previous_rank = previous_participant.get('rank')
+
+        movement = 'new'
+        movement_delta = 0
+        if isinstance(previous_rank, int):
+            if rank < previous_rank:
+                movement = 'climbed'
+                movement_delta = previous_rank - rank
+            elif rank > previous_rank:
+                movement = 'slipped'
+                movement_delta = rank - previous_rank
+            else:
+                movement = 'unchanged'
+
+        current_milestone_counts = get_milestone_counter(participant.get('milestone_counts', {}))
+        previous_milestone_counts = get_milestone_counter(previous_participant.get('milestone_counts', {}))
+        milestone_additions = []
+        milestone_removals = []
+
+        for milestone in sorted(set(current_milestone_counts) | set(previous_milestone_counts)):
+            delta = current_milestone_counts[milestone] - previous_milestone_counts[milestone]
+            if delta > 0:
+                milestone_additions.append({'milestone': milestone, 'count': delta})
+            elif delta < 0:
+                milestone_removals.append({'milestone': milestone, 'count': abs(delta)})
+
+        display_name = participant.get('name') or participant.get('email') or participant_slot_id
+        if movement == 'climbed':
+            climbers.append({'name': display_name, 'moved_by': movement_delta})
+        elif movement == 'slipped':
+            slippers.append({'name': display_name, 'moved_by': movement_delta})
+
+        report_participant = dict(participant)
+        report_participant['rank'] = rank
+        report_participant['previous_rank'] = previous_rank
+        report_participant['movement'] = movement
+        report_participant['movement_delta'] = movement_delta
+        report_participant['milestone_additions'] = milestone_additions
+        report_participant['milestone_removals'] = milestone_removals
+        report_participants.append(report_participant)
+
+    generated_at_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+    return {
+        'generated_at_utc': generated_at_utc,
+        'compared_to_generated_at_utc': previous_snapshot.get('generated_at_utc'),
+        'climbers': climbers,
+        'slippers': slippers,
+        'participants': report_participants,
+    }
+
+def build_leaderboard_snapshot(leaderboard_report):
+    participants = []
+    for participant in leaderboard_report.get('participants', []):
+        participants.append({
+            'participant_slot_id': participant.get('participant_slot_id'),
+            'rank': participant.get('rank'),
+            'cookie_count': participant.get('cookie_count', 0),
+            'milestone_counts': dict(get_milestone_counter(participant.get('milestone_counts', {}))),
+        })
+
+    return {
+        'generated_at_utc': leaderboard_report.get('generated_at_utc'),
+        'participants': participants,
+    }
+
+def format_leaderboard_lines(leaderboard_report):
+    compared_to = leaderboard_report.get('compared_to_generated_at_utc')
+    climbers = leaderboard_report.get('climbers', [])
+    slippers = leaderboard_report.get('slippers', [])
+    participants = leaderboard_report.get('participants', [])
+
+    if climbers:
+        climbed_text = ', '.join(f"{entry['name']} (+{entry['moved_by']})" for entry in climbers)
+    else:
+        climbed_text = 'none.'
+
+    if slippers:
+        slipped_text = ', '.join(f"{entry['name']} (-{entry['moved_by']})" for entry in slippers)
+    else:
+        slipped_text = 'none.'
+
+    lines = []
+    if compared_to:
+        lines.append(f"Compared with leaderboard generated at: {compared_to}")
+    else:
+        lines.append("Compared with leaderboard generated at: none (first leaderboard snapshot).")
+    lines.append(f"Climbed this week: {climbed_text}")
+    lines.append(f"Slipped this week: {slipped_text}")
+
+    if not participants:
+        lines.append("No participants found in the selected participants file.")
+        return lines
+
+    for participant in participants:
+        cookie_count = participant.get('cookie_count', 0)
         cookie_label = 'World Cup Cookie' if cookie_count == 1 else 'World Cup Cookies'
-        display_name = participant['name'] or participant['email'] or 'Unknown participant'
-        email_suffix = f" ({participant['email']})" if participant['name'] and participant['email'] else ''
+        display_name = participant.get('name') or participant.get('email') or 'Unknown participant'
+        email = participant.get('email', '')
+        email_suffix = f" ({email})" if participant.get('name') and email else ''
+        movement_text = get_rank_movement_text(participant)
 
-        print(f"{position}. {display_name}{email_suffix}: {cookie_count} {cookie_label}")
-        if participant['reasons']:
-            print(f"   Reasons: {', '.join(participant['reasons'])}")
+        lines.append(
+            f"{participant['rank']}. {display_name}{email_suffix}: {cookie_count} {cookie_label} ({movement_text})"
+        )
+
+        reasons = participant.get('reasons', [])
+        if reasons:
+            lines.append(f"   Reasons: {', '.join(reasons)}")
         else:
-            print("   Reasons: none yet.")
+            lines.append("   Reasons: none yet.")
 
-    return leaderboard
+        milestone_additions = participant.get('milestone_additions', [])
+        milestone_removals = participant.get('milestone_removals', [])
+        if milestone_additions:
+            lines.append(
+                f"   Milestones added this week: {format_milestone_delta_entries(milestone_additions)}"
+            )
+        if milestone_removals:
+            lines.append(
+                f"   Milestones removed this week: {format_milestone_delta_entries(milestone_removals)}"
+            )
+        if not milestone_additions and not milestone_removals:
+            lines.append("   Milestone changes this week: none.")
+
+    return lines
+
+def print_cookie_leaderboard(leaderboard_report):
+    participants = leaderboard_report.get('participants', [])
+    print(f"LEADERBOARD mode enabled. Ranked {len(participants)} participant(s) by total cookies.")
+
+    for line in format_leaderboard_lines(leaderboard_report):
+        print(line)
+
+    return participants
+
+def send_weekly_leaderboard_email(leaderboard_report, dry_run=False):
+    bcc_email = os.environ.get('BCC_EMAIL', '').strip()
+    if not bcc_email:
+        if dry_run:
+            print('LEADERBOARD DRY RUN: BCC_EMAIL is not set, skipping leaderboard email send.')
+            return False
+        raise ValueError('BCC_EMAIL must be set when LEADERBOARD mode is enabled.')
+
+    if dry_run:
+        print('LEADERBOARD DRY RUN: would email leaderboard to BCC recipient(s) only.')
+        return False
+
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as server:
+        server.login(os.environ.get('SENDER_EMAIL'), os.environ.get('SENDER_PASSWORD'))
+
+        msg = EmailMessage()
+        msg['Subject'] = 'World Cup Sweepstakes: Weekly Cookie Leaderboard'
+        msg['From'] = os.environ.get('SENDER_EMAIL')
+        msg['To'] = 'undisclosed-recipients:;'
+        msg['Bcc'] = bcc_email
+
+        body = (
+            "Hi,\n\n"
+            "Here is this week's cookie leaderboard and week-over-week movement summary.\n\n"
+        )
+        body += '\n'.join(format_leaderboard_lines(leaderboard_report))
+        body += "\n\nCheers,\nTobi"
+
+        msg.set_content(body)
+        server.send_message(msg)
+
+    print('Sent weekly leaderboard email to BCC recipient(s) only.')
+    return True
 
 def process_participants_and_email(team_summary, milestone_messages, tsv_file_path='assigned_participants.tsv', dry_run=False):
     # I read the TSV and send (or simulate) emails to winners.
@@ -659,17 +907,20 @@ if __name__ == "__main__":
     leaderboard_mode = os.environ.get('LEADERBOARD', '').lower() in {'1', 'true', 'yes'}
     participants_file = os.environ.get('PARTICIPANTS_FILE', 'assigned_participants.tsv')
     milestone_messages_file = os.environ.get('MILESTONE_MESSAGES_FILE', MILESTONE_MESSAGES_FILE)
+    state_file = os.environ.get('STATE_FILE', DEFAULT_STATE_FILE).strip() or DEFAULT_STATE_FILE
+    default_leaderboard_state_file = get_default_leaderboard_state_file(participants_file)
+    leaderboard_state_file = (
+        os.environ.get('LEADERBOARD_STATE_FILE', default_leaderboard_state_file).strip()
+        or default_leaderboard_state_file
+    )
 
     if leaderboard_mode:
-        if not dry_run:
-            print('LEADERBOARD enabled: forcing DRY_RUN behavior (no emails will be sent).')
         if not blank_state:
             print('LEADERBOARD enabled: forcing BLANK_STATE behavior (full-tournament scoring).')
-        dry_run = True
         blank_state = True
         persist_state_in_dry_run = False
 
-    should_persist_state = not dry_run or persist_state_in_dry_run
+    should_persist_state = (not leaderboard_mode) and (not dry_run or persist_state_in_dry_run)
 
     if API_KEY in {'', 'YOUR_NEW_TOKEN', 'YOUR_NEW_TOKEN_HERE'}:
         print(
@@ -678,16 +929,16 @@ if __name__ == "__main__":
         )
 
     if blank_state:
-        print('BLANK_STATE enabled: ignoring existing state.json and starting from empty state for this run.')
+        print(f'BLANK_STATE enabled: ignoring existing {state_file} and starting from empty state for this run.')
         if should_persist_state:
             print(
                 'Warning: This run will persist a new state snapshot. '
                 'Use DRY_RUN=1 to keep this as a non-persistent test.'
             )
 
-    state = load_state(force_blank=blank_state)
+    state = load_state(state_file_path=state_file, force_blank=blank_state)
     processed_match_ids = set(state.get('processed_match_ids', []))
-    print(f"Loaded {len(processed_match_ids)} previously processed match id(s) from state.")
+    print(f"Loaded {len(processed_match_ids)} previously processed match id(s) from {state_file}.")
     
     matches = fetch_unprocessed_finished_matches(processed_match_ids)
     print(f"Fetched {len(matches)} new finished match(es) not yet in state.")
@@ -711,8 +962,18 @@ if __name__ == "__main__":
         print_milestone_debug_summary(final_report, team_summary)
     
     if leaderboard_mode:
-        leaderboard = print_cookie_leaderboard(team_summary, participants_file)
-        print(f"Prepared leaderboard for {len(leaderboard)} participant(s).")
+        leaderboard = get_cookie_leaderboard(team_summary, participants_file)
+        previous_leaderboard_snapshot = load_leaderboard_snapshot(leaderboard_state_file)
+        leaderboard_report = build_leaderboard_report(leaderboard, previous_leaderboard_snapshot)
+        print_cookie_leaderboard(leaderboard_report)
+        send_weekly_leaderboard_email(leaderboard_report, dry_run=dry_run)
+        if not dry_run:
+            save_leaderboard_snapshot(
+                build_leaderboard_snapshot(leaderboard_report),
+                leaderboard_state_file,
+            )
+            print(f"Saved leaderboard snapshot to {leaderboard_state_file}.")
+        print(f"Prepared leaderboard for {len(leaderboard_report.get('participants', []))} participant(s).")
     elif team_summary:
         notifications = process_participants_and_email(
             team_summary,
@@ -727,6 +988,8 @@ if __name__ == "__main__":
     if should_persist_state:
         # I save state only after the full run succeeds.
         new_state = update_processed_match_ids(new_state, matches)
-        save_state(new_state)
+        save_state(new_state, state_file_path=state_file)
+    elif leaderboard_mode:
+        print(f'LEADERBOARD: {state_file} was not updated.')
     else:
-        print('DRY RUN: state.json was not updated. Set PERSIST_STATE_IN_DRY_RUN=1 to override.')
+        print(f'DRY RUN: {state_file} was not updated. Set PERSIST_STATE_IN_DRY_RUN=1 to override.')
