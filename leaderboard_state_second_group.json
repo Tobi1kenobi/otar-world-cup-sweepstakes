@@ -1,0 +1,98 @@
+{
+  "generated_at_utc": "2026-06-24T07:48:11Z",
+  "participants": [
+    {
+      "cookie_count": 13,
+      "milestone_counts": {
+        "0-0 Boring Draw": 3,
+        "90+ Minute Goal": 2,
+        "Arsenal Player Goal": 2,
+        "Own Goal": 2,
+        "Red Card": 2,
+        "Scored 4+ Goals": 2
+      },
+      "participant_slot_id": "slot:4",
+      "rank": 1
+    },
+    {
+      "cookie_count": 10,
+      "milestone_counts": {
+        "0-0 Boring Draw": 2,
+        "90+ Minute Goal": 1,
+        "Early Goal (First 5 mins)": 1,
+        "Hat Trick": 1,
+        "Own Goal": 1,
+        "Red Card": 1,
+        "Scored 4+ Goals": 3
+      },
+      "participant_slot_id": "slot:2",
+      "rank": 2
+    },
+    {
+      "cookie_count": 10,
+      "milestone_counts": {
+        "90+ Minute Goal": 5,
+        "Red Card": 2,
+        "Scored 4+ Goals": 3
+      },
+      "participant_slot_id": "slot:5",
+      "rank": 3
+    },
+    {
+      "cookie_count": 7,
+      "milestone_counts": {
+        "0-0 Boring Draw": 1,
+        "90+ Minute Goal": 3,
+        "Arsenal Player Goal": 1,
+        "Own Goal": 1,
+        "Scored 4+ Goals": 1
+      },
+      "participant_slot_id": "slot:1",
+      "rank": 4
+    },
+    {
+      "cookie_count": 6,
+      "milestone_counts": {
+        "0-0 Boring Draw": 1,
+        "90+ Minute Goal": 1,
+        "Early Goal (First 5 mins)": 2,
+        "Own Goal": 1,
+        "Red Card": 1
+      },
+      "participant_slot_id": "slot:8",
+      "rank": 5
+    },
+    {
+      "cookie_count": 6,
+      "milestone_counts": {
+        "90+ Minute Goal": 3,
+        "Own Goal": 2,
+        "Scored 4+ Goals": 1
+      },
+      "participant_slot_id": "slot:6",
+      "rank": 6
+    },
+    {
+      "cookie_count": 4,
+      "milestone_counts": {
+        "90+ Minute Goal": 1,
+        "Early Goal (First 5 mins)": 1,
+        "Red Card": 1,
+        "Scored 4+ Goals": 1
+      },
+      "participant_slot_id": "slot:7",
+      "rank": 7
+    },
+    {
+      "cookie_count": 4,
+      "milestone_counts": {
+        "90+ Minute Goal": 1,
+        "First Goal of Tournament": 1,
+        "Hat Trick": 1,
+        "Red Card": 1
+      },
+      "participant_slot_id": "slot:3",
+      "rank": 8
+    }
+  ]
+}
