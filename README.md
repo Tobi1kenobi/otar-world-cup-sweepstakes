@@ -82,14 +82,16 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 ### Standings Milestones
 
 1. Max Group Points (9)
-- In standings entries where type == TOTAL, for each table row with playedGames == 3 and points == 9, award that team.
+- In standings entries where type == TOTAL, for each table row with playedGames == 3 and points == 9, award that team once.
+- Teams already recorded in `max_group_points_awarded_teams` are not re-awarded in later runs.
 
 2. Zero Group Points (0)
-- In standings entries where type == TOTAL, for each table row with playedGames == 3 and points == 0, award that team.
+- In standings entries where type == TOTAL, for each table row with playedGames == 3 and points == 0, award that team once.
+- Teams already recorded in `zero_group_points_awarded_teams` are not re-awarded in later runs.
 
 ### One-Off Tournament Flags
 
-1. first_goal_awarded, first_ko_goal_awarded, and first_extra_time_awarded are persisted in the active state file (`state.json` by default, override with `STATE_FILE`).
+1. first_goal_awarded, first_ko_goal_awarded, first_extra_time_awarded, max_group_points_awarded_teams, and zero_group_points_awarded_teams are persisted in the active state file (`state.json` by default, override with `STATE_FILE`).
 2. These prevent re-awarding the same one-off milestone in later runs.
 3. They reset only if the active state file is edited/reset.
 

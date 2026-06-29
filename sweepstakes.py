@@ -134,10 +134,28 @@ def load_state(state_file_path=DEFAULT_STATE_FILE, force_blank=False):
     state.setdefault("first_goal_awarded", False)
     state.setdefault("first_ko_goal_awarded", False)
     state.setdefault("first_extra_time_awarded", False)
+    state.setdefault("max_group_points_awarded_teams", [])
+    state.setdefault("zero_group_points_awarded_teams", [])
     state.setdefault("processed_match_ids", [])
 
     if not isinstance(state["processed_match_ids"], list):
         state["processed_match_ids"] = []
+
+    if not isinstance(state["max_group_points_awarded_teams"], list):
+        state["max_group_points_awarded_teams"] = []
+    if not isinstance(state["zero_group_points_awarded_teams"], list):
+        state["zero_group_points_awarded_teams"] = []
+
+    state["max_group_points_awarded_teams"] = sorted({
+        team_name.strip()
+        for team_name in state["max_group_points_awarded_teams"]
+        if isinstance(team_name, str) and team_name.strip()
+    })
+    state["zero_group_points_awarded_teams"] = sorted({
+        team_name.strip()
+        for team_name in state["zero_group_points_awarded_teams"]
+        if isinstance(team_name, str) and team_name.strip()
+    })
 
     return state
 
@@ -395,12 +413,16 @@ def process_milestones(matches, state):
 
     return results, state
 
-def check_standings():
+def check_standings(state):
     # I fetch group standings for max or zero points.
     response = api_get(f"{BASE_URL}/competitions/WC/standings", headers=HEADERS)
+    results = {"Max Group Points (9)": [], "Zero Group Points (0)": []}
+    max_points_awarded = set(state.get("max_group_points_awarded_teams", []))
+    zero_points_awarded = set(state.get("zero_group_points_awarded_teams", []))
+
     if response is None:
         print('Warning: Failed to fetch standings (network error or timeout).')
-        return {"Max Group Points (9)": [], "Zero Group Points (0)": []}
+        return results, state
 
     if response.status_code != 200:
         body_preview = (response.text or '').replace('\n', ' ')[:200]
@@ -408,10 +430,9 @@ def check_standings():
             f"Warning: Failed to fetch standings ({response.status_code}). "
             f"Response: {body_preview}"
         )
-        return {"Max Group Points (9)": [], "Zero Group Points (0)": []}
+        return results, state
     
     standings_data = response.json().get('standings', [])
-    results = {"Max Group Points (9)": [], "Zero Group Points (0)": []}
     
     for group in standings_data:
         if group.get('type') == 'TOTAL':
@@ -421,11 +442,16 @@ def check_standings():
                 team_name = table_row.get('team', {}).get('name')
                 
                 if played == 3:
-                    if points == 9:
+                    if points == 9 and team_name and team_name not in max_points_awarded:
                         results["Max Group Points (9)"].append(team_name)
-                    elif points == 0:
+                        max_points_awarded.add(team_name)
+                    elif points == 0 and team_name and team_name not in zero_points_awarded:
                         results["Zero Group Points (0)"].append(team_name)
-    return results
+                        zero_points_awarded.add(team_name)
+
+    state["max_group_points_awarded_teams"] = sorted(max_points_awarded)
+    state["zero_group_points_awarded_teams"] = sorted(zero_points_awarded)
+    return results, state
 
 def get_team_milestone_summary(final_report):
     # I map milestones directly to the teams, preserving repeated event occurrences.
@@ -952,7 +978,7 @@ if __name__ == "__main__":
         )
 
     daily_results, new_state = process_milestones(matches, state)
-    standings_results = check_standings()
+    standings_results, new_state = check_standings(new_state)
 
     final_report = {**daily_results, **standings_results}
     team_summary = get_team_milestone_summary(final_report)
