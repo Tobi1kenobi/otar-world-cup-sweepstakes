@@ -101,6 +101,14 @@ def get_goal_credit_team_name(goal, home_team, away_team):
         return get_opponent_team_name(goal_team, home_team, away_team)
     return goal_team
 
+def get_match_winner_loser(score, home_team, away_team):
+    winner_enum = score.get('winner')
+    if winner_enum == 'HOME_TEAM':
+        return home_team, away_team
+    if winner_enum == 'AWAY_TEAM':
+        return away_team, home_team
+    return None, None
+
 def normalize_milestone_templates(template_value):
     # I normalize a milestone template value into a non-empty list of strings.
     if isinstance(template_value, str):
@@ -358,12 +366,7 @@ def process_milestones(matches, state):
 
         # I check for giant killers.
         if stage != 'GROUP_STAGE':
-            winner_enum = score.get('winner')
-            winner, loser = None, None
-            if winner_enum == 'HOME_TEAM':
-                winner, loser = home_team, away_team
-            elif winner_enum == 'AWAY_TEAM':
-                winner, loser = away_team, home_team
+            winner, loser = get_match_winner_loser(score, home_team, away_team)
                 
             if winner and loser in top_5:
                 results["Giant Killer (Beat Top 5)"].append(winner)
@@ -412,6 +415,39 @@ def process_milestones(matches, state):
                 if team_name: results["Red Card"].append(team_name)
 
     return results, state
+
+def get_eliminated_teams(matches):
+    # I mark teams as eliminated by knockout loss, and by not reaching knockout stages.
+    eliminated_teams = set()
+    group_stage_matches_by_team = Counter()
+    knockout_participants = set()
+
+    for match in matches:
+        stage = match.get('stage', 'GROUP_STAGE')
+        home_team = get_team_name(match.get('homeTeam', {}))
+        away_team = get_team_name(match.get('awayTeam', {}))
+        if not home_team or not away_team:
+            continue
+
+        if stage == 'GROUP_STAGE':
+            group_stage_matches_by_team[home_team] += 1
+            group_stage_matches_by_team[away_team] += 1
+            continue
+
+        knockout_participants.add(home_team)
+        knockout_participants.add(away_team)
+        score = match.get('score', {})
+        _winner, loser = get_match_winner_loser(score, home_team, away_team)
+        if loser:
+            eliminated_teams.add(loser)
+
+    # I only infer group-stage elimination after at least one knockout result exists.
+    if knockout_participants:
+        for team_name, played_group_matches in group_stage_matches_by_team.items():
+            if played_group_matches >= 3 and team_name not in knockout_participants:
+                eliminated_teams.add(team_name)
+
+    return eliminated_teams
 
 def check_standings(state):
     # I fetch group standings for max or zero points.
@@ -586,9 +622,10 @@ def get_milestone_counter(raw_counts):
 def get_participant_slot_id(slot_number):
     return f"slot:{slot_number}"
 
-def get_cookie_leaderboard(team_summary, tsv_file_path):
+def get_cookie_leaderboard(team_summary, tsv_file_path, eliminated_teams=None):
     # I rank participants by cookie count and keep every team+milestone reason.
     leaderboard = []
+    eliminated_teams = set(eliminated_teams or [])
 
     if not os.path.exists(tsv_file_path):
         raise FileNotFoundError(
@@ -620,6 +657,11 @@ def get_cookie_leaderboard(team_summary, tsv_file_path):
                     reasons.append(f"{team} [{milestone}]")
                     milestone_counts[milestone] += 1
 
+            all_teams_eliminated = bool(unique_assigned_teams) and all(
+                team in eliminated_teams
+                for team in unique_assigned_teams
+            )
+
             if name:
                 sort_name = name.lower()
             elif email:
@@ -634,6 +676,7 @@ def get_cookie_leaderboard(team_summary, tsv_file_path):
                 'cookie_count': len(reasons),
                 'reasons': reasons,
                 'milestone_counts': dict(milestone_counts),
+                'all_teams_eliminated': all_teams_eliminated,
                 'sort_name': sort_name,
             })
 
@@ -801,10 +844,12 @@ def format_leaderboard_lines(leaderboard_report):
         display_name = participant.get('name') or participant.get('email') or 'Unknown participant'
         email = participant.get('email', '')
         email_suffix = f" ({email})" if participant.get('name') and email else ''
+        elimination_suffix = " [ELIMINATED]" if participant.get('all_teams_eliminated') else ''
         movement_text = get_rank_movement_text(participant)
 
         lines.append(
-            f"{participant['rank']}. {display_name}{email_suffix}: {cookie_count} {cookie_label} ({movement_text})"
+            f"{participant['rank']}. {display_name}{email_suffix}{elimination_suffix}: "
+            f"{cookie_count} {cookie_label} ({movement_text})"
         )
 
         reasons = participant.get('reasons', [])
@@ -988,7 +1033,12 @@ if __name__ == "__main__":
         print_milestone_debug_summary(final_report, team_summary)
     
     if leaderboard_mode:
-        leaderboard = get_cookie_leaderboard(team_summary, participants_file)
+        eliminated_teams = get_eliminated_teams(matches)
+        leaderboard = get_cookie_leaderboard(
+            team_summary,
+            participants_file,
+            eliminated_teams=eliminated_teams,
+        )
         previous_leaderboard_snapshot = load_leaderboard_snapshot(leaderboard_state_file)
         leaderboard_report = build_leaderboard_report(leaderboard, previous_leaderboard_snapshot)
         print_cookie_leaderboard(leaderboard_report)

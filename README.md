@@ -8,7 +8,7 @@ Automated World Cup sweepstakes scoring and winner notifications using the footb
 - Applies milestone rules (red cards, own goals, first goal, penalties, and more).
 - Maps winning teams to participants.
 - Sends one consolidated winner email per participant per run (or prints in dry-run mode).
-- Supports weekly leaderboard mode for both participant groups, with climbs/slips and milestone changes since each group's previous leaderboard.
+- Supports weekly leaderboard mode for both participant groups, with climbs/slips, milestone changes, and an `ELIMINATED` tag when all assigned teams are out.
 - Supports milestone-specific message templates via milestone_messages.yaml.
 - Persists one-off milestone flags and processed match IDs in state files (`state.json` by default, `state_second_group.json` for the second group schedule).
 
@@ -199,6 +199,8 @@ DRY_RUN=1 \
 PARTICIPANTS_FILE=assigned_participants.tsv \
 python sweepstakes.py
 ```
+
+In leaderboard output, participants are marked `ELIMINATED` when all their assigned teams are out, either by losing a finished knockout-stage match or by completing group-stage play without appearing in any finished knockout-stage match.
 
 Important API note:
 
