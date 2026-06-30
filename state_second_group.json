@@ -1,7 +1,12 @@
 {
-  "first_extra_time_awarded": false,
+  "first_extra_time_awarded": true,
   "first_goal_awarded": true,
   "first_ko_goal_awarded": true,
+  "max_group_points_awarded_teams": [
+    "Argentina",
+    "France",
+    "Mexico"
+  ],
   "processed_match_ids": [
     537327,
     537328,
@@ -75,6 +80,17 @@
     537412,
     537413,
     537414,
-    537417
+    537415,
+    537417,
+    537418,
+    537423
+  ],
+  "zero_group_points_awarded_teams": [
+    "Haiti",
+    "Iraq",
+    "Jordan",
+    "Panama",
+    "Tunisia",
+    "Uzbekistan"
   ]
 }
