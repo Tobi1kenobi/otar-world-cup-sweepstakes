@@ -164,6 +164,11 @@ def load_state(state_file_path=DEFAULT_STATE_FILE, force_blank=False):
         for team_name in state["zero_group_points_awarded_teams"]
         if isinstance(team_name, str) and team_name.strip()
     })
+    if "group_stage_standings_finalized" not in state:
+        # I migrate older state snapshots: if knockout has started, standings one-offs are already in the past.
+        state["group_stage_standings_finalized"] = bool(state.get("first_ko_goal_awarded", False))
+    else:
+        state["group_stage_standings_finalized"] = bool(state.get("group_stage_standings_finalized"))
 
     return state
 
@@ -309,6 +314,57 @@ def update_processed_match_ids(state, matches):
     state['processed_match_ids'] = sorted(processed_ids)
     return state
 
+def get_non_shootout_goal_totals(score):
+    # I determine match goals excluding penalty-shootout kicks.
+    duration = score.get('duration', 'REGULAR')
+
+    full_home = parse_score_value(score.get('fullTime', {}).get('home'))
+    full_away = parse_score_value(score.get('fullTime', {}).get('away'))
+    regular_home = parse_score_value(score.get('regularTime', {}).get('home'))
+    regular_away = parse_score_value(score.get('regularTime', {}).get('away'))
+    extra_home = parse_score_value(score.get('extraTime', {}).get('home'))
+    extra_away = parse_score_value(score.get('extraTime', {}).get('away'))
+
+    if duration in ['EXTRA_TIME', 'PENALTY_SHOOTOUT']:
+        home_goals = extra_home if extra_home is not None else full_home
+        away_goals = extra_away if extra_away is not None else full_away
+        if home_goals is None:
+            home_goals = regular_home
+        if away_goals is None:
+            away_goals = regular_away
+        return home_goals, away_goals
+
+    home_goals = full_home if full_home is not None else regular_home
+    away_goals = full_away if full_away is not None else regular_away
+    return home_goals, away_goals
+
+def is_penalty_shootout_goal(goal, duration, minute, credit_team, credited_goal_counts, goal_limits):
+    # I identify and skip shootout-kick entries so they do not trigger goal milestones.
+    if duration != 'PENALTY_SHOOTOUT':
+        return False
+
+    period = str(goal.get('period', '')).upper()
+    goal_type = str(goal.get('type', '')).upper()
+
+    if period in {'PENALTY_SHOOTOUT', 'PENALTIES', 'SHOOTOUT'}:
+        return True
+    if goal_type in {'PENALTY_SHOOTOUT', 'SHOOTOUT'}:
+        return True
+    if goal.get('penaltyShootout') is True:
+        return True
+    if minute is None or minute > 120:
+        return True
+
+    limit = goal_limits.get(credit_team)
+    if (
+        credit_team in credited_goal_counts
+        and isinstance(limit, int)
+        and credited_goal_counts[credit_team] >= limit
+    ):
+        return True
+
+    return False
+
 def process_milestones(matches, state):
     # I store the winning teams.
     results = {
@@ -332,21 +388,15 @@ def process_milestones(matches, state):
 
         score = match.get('score', {})
         stage = match.get('stage', 'GROUP_STAGE')
-
-        ft_home = parse_score_value(score.get('fullTime', {}).get('home'))
-        ft_away = parse_score_value(score.get('fullTime', {}).get('away'))
-        if ft_home is None and ft_away is None:
-            # I fall back to regularTime when fullTime is missing in some payloads.
-            ft_home = parse_score_value(score.get('regularTime', {}).get('home'))
-            ft_away = parse_score_value(score.get('regularTime', {}).get('away'))
+        scoring_home, scoring_away = get_non_shootout_goal_totals(score)
         
         # I check full-time milestones.
-        if ft_home == 0 and ft_away == 0:
+        if scoring_home == 0 and scoring_away == 0:
             results["0-0 Boring Draw"].append(home_team)
             results["0-0 Boring Draw"].append(away_team)
-        if ft_home is not None and ft_home >= 4:
+        if scoring_home is not None and scoring_home >= 4:
             results["Scored 4+ Goals"].append(home_team)
-        if ft_away is not None and ft_away >= 4:
+        if scoring_away is not None and scoring_away >= 4:
             results["Scored 4+ Goals"].append(away_team)
 
         # I check extra time and penalties.
@@ -373,21 +423,36 @@ def process_milestones(matches, state):
 
         # I check in-game events.
         goals_by_scorer_and_team = {}
+        goal_limits = {home_team: scoring_home, away_team: scoring_away}
+        credited_goal_counts = {home_team: 0, away_team: 0}
         for goal in match.get('goals', []):
-            minute = goal.get('minute', 0)
+            minute = parse_score_value(goal.get('minute'))
             scorer_name = goal.get('scorer', {}).get('name')
             goal_team = get_team_name(goal.get('team', {}))
             credit_team = get_goal_credit_team_name(goal, home_team, away_team)
             own_goal = is_own_goal(goal)
+
+            if is_penalty_shootout_goal(
+                goal,
+                duration,
+                minute,
+                credit_team,
+                credited_goal_counts,
+                goal_limits,
+            ):
+                continue
+
+            if credit_team in credited_goal_counts:
+                credited_goal_counts[credit_team] += 1
             
             if own_goal and goal_team:
                 # I award own goals to the team of the player who scored the own goal.
                 results["Own Goal"].append(goal_team)
                 
-            if minute >= 90 and credit_team:
+            if minute is not None and minute >= 90 and credit_team:
                 results["90+ Minute Goal"].append(credit_team)
                 
-            if minute <= 5 and credit_team:
+            if minute is not None and minute <= 5 and credit_team:
                 results["Early Goal (First 5 mins)"].append(credit_team)
                 
             if not own_goal and scorer_name in ARSENAL_PLAYERS and credit_team:
@@ -451,8 +516,11 @@ def get_eliminated_teams(matches):
 
 def check_standings(state):
     # I fetch group standings for max or zero points.
-    response = api_get(f"{BASE_URL}/competitions/WC/standings", headers=HEADERS)
     results = {"Max Group Points (9)": [], "Zero Group Points (0)": []}
+    if state.get("group_stage_standings_finalized"):
+        return results, state
+
+    response = api_get(f"{BASE_URL}/competitions/WC/standings", headers=HEADERS)
     max_points_awarded = set(state.get("max_group_points_awarded_teams", []))
     zero_points_awarded = set(state.get("zero_group_points_awarded_teams", []))
 
@@ -469,24 +537,44 @@ def check_standings(state):
         return results, state
     
     standings_data = response.json().get('standings', [])
-    
+    standings_rows = []
     for group in standings_data:
         if group.get('type') == 'TOTAL':
-            for table_row in group.get('table', []):
-                played = table_row.get('playedGames', 0)
-                points = table_row.get('points', 0)
-                team_name = table_row.get('team', {}).get('name')
-                
-                if played == 3:
-                    if points == 9 and team_name and team_name not in max_points_awarded:
-                        results["Max Group Points (9)"].append(team_name)
-                        max_points_awarded.add(team_name)
-                    elif points == 0 and team_name and team_name not in zero_points_awarded:
-                        results["Zero Group Points (0)"].append(team_name)
-                        zero_points_awarded.add(team_name)
+            standings_rows.extend(group.get('table', []))
+
+    if not standings_rows:
+        return results, state
+
+    # I award group-stage standings milestones only once, after all groups are complete.
+    group_stage_complete = True
+    for table_row in standings_rows:
+        played = parse_score_value(table_row.get('playedGames'))
+        if played != 3:
+            group_stage_complete = False
+            break
+
+    if not group_stage_complete:
+        return results, state
+    
+    for table_row in standings_rows:
+        points = parse_score_value(table_row.get('points'))
+        team_name = get_team_name(table_row.get('team', {}))
+        if not team_name:
+            team_name = table_row.get('team', {}).get('name')
+        if not isinstance(team_name, str) or not team_name.strip():
+            continue
+        team_name = team_name.strip()
+
+        if points == 9 and team_name not in max_points_awarded:
+            results["Max Group Points (9)"].append(team_name)
+            max_points_awarded.add(team_name)
+        elif points == 0 and team_name not in zero_points_awarded:
+            results["Zero Group Points (0)"].append(team_name)
+            zero_points_awarded.add(team_name)
 
     state["max_group_points_awarded_teams"] = sorted(max_points_awarded)
     state["zero_group_points_awarded_teams"] = sorted(zero_points_awarded)
+    state["group_stage_standings_finalized"] = True
     return results, state
 
 def get_team_milestone_summary(final_report):

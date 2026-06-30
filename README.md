@@ -61,9 +61,10 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 - If fullTime.home == 0 and fullTime.away == 0, award both teams.
 
 9. Scored 4+ Goals
-- If fullTime.home >= 4, award home team.
-- If fullTime.away >= 4, award away team.
-- This is based on the final score, so own goals still count toward the benefiting team's match total.
+- If the home side reaches 4+ non-shootout goals, award home team.
+- If the away side reaches 4+ non-shootout goals, award away team.
+- This is based on the final match score before shootout kicks, so own goals still count toward the benefiting team's match total.
+- Penalty shootout kicks are excluded from this check.
 
 10. Early Goal (First 5 mins)
 - For each goal, if goal.minute <= 5 and a credited scoring team can be determined, award the credited scoring team.
@@ -78,20 +79,21 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 
 13. Arsenal Player Goal
 - For each non-own goal, if goal.scorer.name is in ARSENAL_PLAYERS and a credited scoring team can be determined, award that team.
+- Penalty shootout kicks are excluded from all goal-event milestone checks.
 
 ### Standings Milestones
 
 1. Max Group Points (9)
-- In standings entries where type == TOTAL, for each table row with playedGames == 3 and points == 9, award that team once.
+- After all group tables have completed (every team played 3), in standings entries where type == TOTAL, for each table row with points == 9, award that team once.
 - Teams already recorded in `max_group_points_awarded_teams` are not re-awarded in later runs.
 
 2. Zero Group Points (0)
-- In standings entries where type == TOTAL, for each table row with playedGames == 3 and points == 0, award that team once.
+- After all group tables have completed (every team played 3), in standings entries where type == TOTAL, for each table row with points == 0, award that team once.
 - Teams already recorded in `zero_group_points_awarded_teams` are not re-awarded in later runs.
 
 ### One-Off Tournament Flags
 
-1. first_goal_awarded, first_ko_goal_awarded, first_extra_time_awarded, max_group_points_awarded_teams, and zero_group_points_awarded_teams are persisted in the active state file (`state.json` by default, override with `STATE_FILE`).
+1. first_goal_awarded, first_ko_goal_awarded, first_extra_time_awarded, group_stage_standings_finalized, max_group_points_awarded_teams, and zero_group_points_awarded_teams are persisted in the active state file (`state.json` by default, override with `STATE_FILE`).
 2. These prevent re-awarding the same one-off milestone in later runs.
 3. They reset only if the active state file is edited/reset.
 
