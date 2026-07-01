@@ -2,6 +2,7 @@
   "first_extra_time_awarded": true,
   "first_goal_awarded": true,
   "first_ko_goal_awarded": true,
+  "group_stage_standings_finalized": true,
   "max_group_points_awarded_teams": [
     "Argentina",
     "France",
@@ -81,9 +82,12 @@
     537413,
     537414,
     537415,
+    537416,
     537417,
     537418,
-    537423
+    537423,
+    537424,
+    537425
   ],
   "zero_group_points_awarded_teams": [
     "Haiti",
