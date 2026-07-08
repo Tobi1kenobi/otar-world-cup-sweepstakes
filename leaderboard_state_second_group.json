@@ -1,26 +1,43 @@
 {
-  "generated_at_utc": "2026-07-01T07:58:08Z",
+  "generated_at_utc": "2026-07-08T07:21:21Z",
   "participants": [
     {
-      "cookie_count": 18,
+      "cookie_count": 22,
       "milestone_counts": {
-        "0-0 Boring Draw": 4,
+        "0-0 Boring Draw": 3,
+        "90+ Minute Goal": 6,
+        "Arsenal Player Goal": 3,
+        "Early Goal (First 5 mins)": 1,
+        "First Knockout Stage Goal": 1,
+        "Hat Trick": 1,
+        "Own Goal": 1,
+        "Red Card": 1,
+        "Scored 4+ Goals": 5
+      },
+      "participant_slot_id": "slot:2",
+      "rank": 1
+    },
+    {
+      "cookie_count": 21,
+      "milestone_counts": {
+        "0-0 Boring Draw": 5,
         "90+ Minute Goal": 2,
         "Arsenal Player Goal": 2,
         "Early Goal (First 5 mins)": 2,
         "First Two Teams to Extra Time": 1,
         "Own Goal": 3,
-        "Red Card": 2,
-        "Scored 4+ Goals": 2
+        "Red Card": 3,
+        "Scored 4+ Goals": 2,
+        "Won Penalty Shootout": 1
       },
       "participant_slot_id": "slot:4",
-      "rank": 1
+      "rank": 2
     },
     {
-      "cookie_count": 18,
+      "cookie_count": 20,
       "milestone_counts": {
-        "0-0 Boring Draw": 5,
-        "90+ Minute Goal": 1,
+        "0-0 Boring Draw": 6,
+        "90+ Minute Goal": 2,
         "Early Goal (First 5 mins)": 2,
         "First Two Teams to Extra Time": 1,
         "Own Goal": 3,
@@ -30,28 +47,27 @@
         "Zero Group Points (0)": 1
       },
       "participant_slot_id": "slot:8",
-      "rank": 2
-    },
-    {
-      "cookie_count": 17,
-      "milestone_counts": {
-        "0-0 Boring Draw": 3,
-        "90+ Minute Goal": 3,
-        "Arsenal Player Goal": 2,
-        "Early Goal (First 5 mins)": 1,
-        "First Knockout Stage Goal": 1,
-        "Hat Trick": 1,
-        "Own Goal": 1,
-        "Red Card": 1,
-        "Scored 4+ Goals": 4
-      },
-      "participant_slot_id": "slot:2",
       "rank": 3
     },
     {
-      "cookie_count": 15,
+      "cookie_count": 19,
       "milestone_counts": {
         "0-0 Boring Draw": 2,
+        "90+ Minute Goal": 7,
+        "Early Goal (First 5 mins)": 1,
+        "Giant Killer (Beat Top 5)": 1,
+        "Red Card": 2,
+        "Scored 4+ Goals": 4,
+        "Won Penalty Shootout": 1,
+        "Zero Group Points (0)": 1
+      },
+      "participant_slot_id": "slot:5",
+      "rank": 4
+    },
+    {
+      "cookie_count": 16,
+      "milestone_counts": {
+        "0-0 Boring Draw": 3,
         "90+ Minute Goal": 4,
         "Arsenal Player Goal": 1,
         "Hat Trick": 1,
@@ -62,34 +78,33 @@
         "Zero Group Points (0)": 1
       },
       "participant_slot_id": "slot:1",
-      "rank": 4
-    },
-    {
-      "cookie_count": 14,
-      "milestone_counts": {
-        "0-0 Boring Draw": 1,
-        "90+ Minute Goal": 5,
-        "Early Goal (First 5 mins)": 1,
-        "Red Card": 2,
-        "Scored 4+ Goals": 4,
-        "Zero Group Points (0)": 1
-      },
-      "participant_slot_id": "slot:5",
       "rank": 5
     },
     {
-      "cookie_count": 13,
+      "cookie_count": 15,
       "milestone_counts": {
-        "90+ Minute Goal": 5,
+        "90+ Minute Goal": 6,
         "Arsenal Player Goal": 1,
         "Early Goal (First 5 mins)": 1,
         "Own Goal": 2,
-        "Red Card": 1,
+        "Red Card": 2,
         "Scored 4+ Goals": 1,
         "Zero Group Points (0)": 2
       },
       "participant_slot_id": "slot:6",
       "rank": 6
+    },
+    {
+      "cookie_count": 11,
+      "milestone_counts": {
+        "90+ Minute Goal": 6,
+        "First Goal of Tournament": 1,
+        "Hat Trick": 1,
+        "Max Group Points (9)": 2,
+        "Red Card": 1
+      },
+      "participant_slot_id": "slot:3",
+      "rank": 7
     },
     {
       "cookie_count": 9,
@@ -102,18 +117,6 @@
         "Zero Group Points (0)": 1
       },
       "participant_slot_id": "slot:7",
-      "rank": 7
-    },
-    {
-      "cookie_count": 8,
-      "milestone_counts": {
-        "90+ Minute Goal": 3,
-        "First Goal of Tournament": 1,
-        "Hat Trick": 1,
-        "Max Group Points (9)": 2,
-        "Red Card": 1
-      },
-      "participant_slot_id": "slot:3",
       "rank": 8
     }
   ]
