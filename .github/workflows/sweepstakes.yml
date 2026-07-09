@@ -4,10 +4,10 @@ on:
   schedule:
     # Second participant group notifications (Mon-Fri 06:00 UTC).
     - cron: '0 6 * * 1-5'
-    # Weekly second-group leaderboard email (Wednesday 06:30 UTC).
-    - cron: '30 6 * * 3'
-    # Weekly leaderboard email (Wednesday 07:00 UTC).
-    - cron: '0 7 * * 3'
+    # Weekly second-group leaderboard email (Tuesday 06:30 UTC).
+    - cron: '30 6 * * 2'
+    # Weekly leaderboard email (Tuesday 07:00 UTC).
+    - cron: '0 7 * * 2'
     # Primary participant group notifications (Mon-Fri 08:00 UTC).
     - cron: '0 8 * * 1-5'
   workflow_dispatch:
