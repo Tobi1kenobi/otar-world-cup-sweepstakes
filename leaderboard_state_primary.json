@@ -1,6 +1,22 @@
 {
-  "generated_at_utc": "2026-07-08T07:45:10Z",
+  "generated_at_utc": "2026-07-21T13:35:20Z",
   "participants": [
+    {
+      "cookie_count": 18,
+      "milestone_counts": {
+        "0-0 Boring Draw": 1,
+        "90+ Minute Goal": 4,
+        "Arsenal Player Goal": 4,
+        "Early Goal (First 5 mins)": 1,
+        "First Knockout Stage Goal": 1,
+        "Giant Killer (Beat Top 5)": 1,
+        "Hat Trick": 2,
+        "Red Card": 1,
+        "Scored 4+ Goals": 3
+      },
+      "participant_slot_id": "slot:15",
+      "rank": 1
+    },
     {
       "cookie_count": 13,
       "milestone_counts": {
@@ -12,7 +28,31 @@
         "Scored 4+ Goals": 3
       },
       "participant_slot_id": "slot:9",
-      "rank": 1
+      "rank": 2
+    },
+    {
+      "cookie_count": 10,
+      "milestone_counts": {
+        "90+ Minute Goal": 4,
+        "Arsenal Player Goal": 1,
+        "Hat Trick": 1,
+        "Max Group Points (9)": 1,
+        "Scored 4+ Goals": 3
+      },
+      "participant_slot_id": "slot:8",
+      "rank": 3
+    },
+    {
+      "cookie_count": 9,
+      "milestone_counts": {
+        "0-0 Boring Draw": 1,
+        "90+ Minute Goal": 3,
+        "Arsenal Player Goal": 2,
+        "Giant Killer (Beat Top 5)": 2,
+        "Scored 4+ Goals": 1
+      },
+      "participant_slot_id": "slot:21",
+      "rank": 4
     },
     {
       "cookie_count": 9,
@@ -26,7 +66,7 @@
         "Zero Group Points (0)": 1
       },
       "participant_slot_id": "slot:17",
-      "rank": 2
+      "rank": 5
     },
     {
       "cookie_count": 9,
@@ -38,19 +78,19 @@
         "Red Card": 3
       },
       "participant_slot_id": "slot:4",
-      "rank": 3
+      "rank": 6
     },
     {
       "cookie_count": 8,
       "milestone_counts": {
+        "0-0 Boring Draw": 2,
         "90+ Minute Goal": 3,
-        "Arsenal Player Goal": 1,
-        "Hat Trick": 1,
-        "Max Group Points (9)": 1,
-        "Scored 4+ Goals": 2
+        "Red Card": 1,
+        "Scored 4+ Goals": 1,
+        "Won Penalty Shootout": 1
       },
-      "participant_slot_id": "slot:8",
-      "rank": 4
+      "participant_slot_id": "slot:11",
+      "rank": 7
     },
     {
       "cookie_count": 8,
@@ -64,20 +104,7 @@
         "Won Penalty Shootout": 1
       },
       "participant_slot_id": "slot:6",
-      "rank": 5
-    },
-    {
-      "cookie_count": 8,
-      "milestone_counts": {
-        "0-0 Boring Draw": 1,
-        "90+ Minute Goal": 2,
-        "First Knockout Stage Goal": 1,
-        "Hat Trick": 1,
-        "Red Card": 1,
-        "Scored 4+ Goals": 2
-      },
-      "participant_slot_id": "slot:15",
-      "rank": 6
+      "rank": 8
     },
     {
       "cookie_count": 7,
@@ -90,18 +117,7 @@
         "Won Penalty Shootout": 1
       },
       "participant_slot_id": "slot:14",
-      "rank": 7
-    },
-    {
-      "cookie_count": 7,
-      "milestone_counts": {
-        "0-0 Boring Draw": 2,
-        "90+ Minute Goal": 3,
-        "Scored 4+ Goals": 1,
-        "Won Penalty Shootout": 1
-      },
-      "participant_slot_id": "slot:11",
-      "rank": 8
+      "rank": 9
     },
     {
       "cookie_count": 7,
@@ -114,17 +130,6 @@
         "Scored 4+ Goals": 1
       },
       "participant_slot_id": "slot:16",
-      "rank": 9
-    },
-    {
-      "cookie_count": 5,
-      "milestone_counts": {
-        "0-0 Boring Draw": 1,
-        "90+ Minute Goal": 2,
-        "Arsenal Player Goal": 1,
-        "Scored 4+ Goals": 1
-      },
-      "participant_slot_id": "slot:21",
       "rank": 10
     },
     {
