@@ -77,13 +77,13 @@ jobs:
                 STATE_FILE="state_second_group.json"
                 LEADERBOARD_STATE_FILE="leaderboard_state_second_group.json"
                 ;;
-              '30 6 * * 3')
+              '30 6 * * 2')
                 PARTICIPANTS_FILE="assigned_participants_second_group.tsv"
                 STATE_FILE="state_second_group.json"
                 LEADERBOARD="1"
                 LEADERBOARD_STATE_FILE="leaderboard_state_second_group.json"
                 ;;
-              '0 7 * * 3')
+              '0 7 * * 2')
                 PARTICIPANTS_FILE="assigned_participants_real.tsv"
                 LEADERBOARD="1"
                 LEADERBOARD_STATE_FILE="leaderboard_state_primary.json"
@@ -120,7 +120,7 @@ jobs:
           echo "LEADERBOARD_STATE_FILE=$LEADERBOARD_STATE_FILE" >> "$GITHUB_ENV"
 
       - name: Create private participants file for primary-group runs
-        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 7 * * 3' || github.event.schedule == '0 8 * * 1-5')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv') }}
+        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 7 * * 2' || github.event.schedule == '0 8 * * 1-5')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv') }}
         env:
           PARTICIPANTS_REAL_TSV: ${{ secrets.PARTICIPANTS_REAL_TSV }}
         run: |
@@ -135,7 +135,7 @@ jobs:
           fi
 
       - name: Create private participants file for second-group runs
-        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 6 * * 1-5' || github.event.schedule == '30 6 * * 3')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_second_group.tsv') }}
+        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 6 * * 1-5' || github.event.schedule == '30 6 * * 2')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_second_group.tsv') }}
         env:
           PARTICIPANTS_SECOND_GROUP_TSV: ${{ secrets.PARTICIPANTS_SECOND_GROUP_TSV }}
         run: |

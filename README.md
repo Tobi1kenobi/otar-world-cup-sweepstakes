@@ -100,8 +100,8 @@ The rules below are the exact checks currently implemented in [sweepstakes.py](s
 ## Schedule Logic
 
 - Scheduled workflow runs at 06:00 UTC Monday-Friday for the second participant group (`assigned_participants_second_group.tsv` + `state_second_group.json`).
-- Scheduled workflow runs at 06:30 UTC every Wednesday for second-group leaderboard generation (emailed to `BCC_EMAIL` only).
-- Scheduled workflow runs at 07:00 UTC every Wednesday for primary-group leaderboard generation (emailed to `BCC_EMAIL` only).
+- Scheduled workflow runs at 06:30 UTC every Tuesday for second-group leaderboard generation (emailed to `BCC_EMAIL` only).
+- Scheduled workflow runs at 07:00 UTC every Tuesday for primary-group leaderboard generation (emailed to `BCC_EMAIL` only).
 - Scheduled workflow runs at 08:00 UTC Monday-Friday for the primary participant group (`assigned_participants_real.tsv` + `state.json`).
 - Manual runs use `participants_file` from workflow dispatch and can also override `STATE_FILE` locally.
 
