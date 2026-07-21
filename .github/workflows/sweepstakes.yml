@@ -6,8 +6,8 @@ on:
     - cron: '0 6 * * 1-5'
     # Weekly second-group leaderboard email (Tuesday 06:30 UTC).
     - cron: '30 6 * * 2'
-    # Weekly leaderboard email (Tuesday 07:00 UTC).
-    - cron: '0 7 * * 2'
+    # Weekly leaderboard email (Tuesday 13:00 UTC).
+    - cron: '0 13 * * 2'
     # Primary participant group notifications (Mon-Fri 08:00 UTC).
     - cron: '0 8 * * 1-5'
   workflow_dispatch:
@@ -83,7 +83,7 @@ jobs:
                 LEADERBOARD="1"
                 LEADERBOARD_STATE_FILE="leaderboard_state_second_group.json"
                 ;;
-              '0 7 * * 2')
+              '0 13 * * 2')
                 PARTICIPANTS_FILE="assigned_participants_real.tsv"
                 LEADERBOARD="1"
                 LEADERBOARD_STATE_FILE="leaderboard_state_primary.json"
@@ -120,7 +120,7 @@ jobs:
           echo "LEADERBOARD_STATE_FILE=$LEADERBOARD_STATE_FILE" >> "$GITHUB_ENV"
 
       - name: Create private participants file for primary-group runs
-        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 7 * * 2' || github.event.schedule == '0 8 * * 1-5')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv') }}
+        if: ${{ (github.event_name == 'schedule' && (github.event.schedule == '0 13 * * 2' || github.event.schedule == '0 8 * * 1-5')) || (github.event_name == 'workflow_dispatch' && inputs.participants_file == 'assigned_participants_real.tsv') }}
         env:
           PARTICIPANTS_REAL_TSV: ${{ secrets.PARTICIPANTS_REAL_TSV }}
         run: |
